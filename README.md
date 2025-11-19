@@ -34,8 +34,6 @@ La ejecución mostrará logs de cada criatura y generación. Al finalizar cada g
 - `generation_summary.csv` — resumen por generación (omitido por defecto en git via `.gitignore`).
 
 **Licencia**
-Este proyecto se entrega bajo licencia MIT — adáptalo según prefieras.
+Este proyecto se entrega bajo licencia MIT.
 
----
-Version inicial — generada automáticamente por el asistente de desarrollo.
 
