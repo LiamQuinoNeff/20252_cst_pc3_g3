@@ -41,8 +41,13 @@ class GenerationAgent(Agent):
         self.spawned_agents = []
         # flag para evitar llamadas reentrantes a _end_generation
         self._ending = False
-        # CSV file for summaries
-        self.summary_file = os.path.join(os.path.dirname(__file__), "generation_summary.csv")
+
+        # CSV FILE FOR SUMMARIES (UNCOMMENT IF UR NOT ON WSL)
+        # self.summary_file = os.path.join(os.path.dirname(__file__), "generation_summary.csv")
+
+        # IF YOURE ON WSL COMMENT THE ABOVE AND UNCOMMENT BELOW
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        self.summary_file = os.path.join(script_dir, "generation_summary.csv")
 
     # food placement and distance calculations delegated to utils
 
@@ -263,8 +268,11 @@ class GenerationAgent(Agent):
                 if write_header:
                     writer.writerow(header)
                 writer.writerow(row)
+            print(f"Summary written to {self.summary_file}")
         except Exception as e:
-            print(f"Failed writing summary CSV: {e}")
+            print(f"Failed writing summary CSV to {self.summary_file}: {e}")
+            import traceback
+            traceback.print_exc()
 
         # si no quedan individuos -> terminar simulación
         if len(next_specs) == 0 or self.generation >= self.max_generations:

@@ -2,3 +2,4 @@
 __pycache__/
 generation_summary.csv
 *.pyc
+server.db

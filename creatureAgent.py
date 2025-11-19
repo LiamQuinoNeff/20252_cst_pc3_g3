@@ -85,6 +85,15 @@ class CreatureAgent(Agent):
 			msg.body = json.dumps(payload)
 			await self.send(msg)
 
+			try:
+				host_jid = getattr(self.agent, "host_jid", "host@localhost")
+				host_msg = Message(to=host_jid)
+				host_msg.set_metadata("performative", "inform")
+				host_msg.body = json.dumps({"type": "status", "jid": state.jid, "x": state.x, "y": state.y, "energy": state.energy, "foods_eaten": state.foods_eaten, "speed": state.speed})
+				await self.send(host_msg)
+			except Exception:
+				pass
+
 			# Si la energía se acabó, notificar y detener
 			if state.energy <= 0:
 				end_msg = Message(to=self.agent.generation_jid)
