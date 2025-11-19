@@ -8,7 +8,7 @@ Pequeño proyecto con agentes SPADE que simula generaciones de criaturas que se 
 - Reglas de supervivencia/reproducción (versión actual):
   - 0 comidas -> muere
   - 1 comida  -> sobrevive (padre permanece)
-  - >=2 comidas -> padre sobrevive y además genera 1 hijo
+  - 2 comidas o más -> padre sobrevive y además genera 1 hijo
 - La simulación escribe un resumen por generación en `generation_summary.csv` (ubicado en la carpeta `pc3`).
 
 **Requisitos**
@@ -35,5 +35,6 @@ La ejecución mostrará logs de cada criatura y generación. Al finalizar cada g
 
 **Licencia**
 Este proyecto se entrega bajo licencia MIT.
+
 
 
