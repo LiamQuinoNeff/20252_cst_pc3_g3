@@ -26,7 +26,7 @@ py hostAgent.py
 
 La ejecución mostrará logs de cada criatura y generación. Al finalizar cada generación se añadirá/actualizará `generation_summary.csv`.
 
-Leer comentarios en `generationAgent.py` para ejecutar en WSL (líneas 46 a 51).
+Leer comentarios en `generationAgent.py` para la creación de `generation_summary.csv` en WSL (líneas 46 a 51).
 
 **Archivos importantes en `20252_cst_pc3_g3`**
 - `hostAgent.py` — lanzador / punto de entrada.
@@ -37,6 +37,7 @@ Leer comentarios en `generationAgent.py` para ejecutar en WSL (líneas 46 a 51).
 
 **Licencia**
 Este proyecto se entrega bajo licencia MIT.
+
 
 
 
