@@ -1,5 +1,5 @@
 # Ignore Python cache and generated summary for pc3
 __pycache__/
-generation_summary.csv
+*.csv
 *.pyc
 server.db

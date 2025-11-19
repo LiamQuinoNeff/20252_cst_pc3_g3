@@ -44,6 +44,8 @@ class GenerationAgent(Agent):
 
         # comenten esta linea si usan wsl
         self.summary_file = os.path.join(os.path.dirname(__file__), "generation_summary.csv")
+        # CSV file for per-creature details (appended each generation)
+        self.details_file = os.path.join(os.path.dirname(__file__), "generation_details.csv")
 
         # descomentar esto si estan usando wsl
         #script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -64,11 +66,23 @@ class GenerationAgent(Agent):
 
         to_spawn = []
         if spawn_list is None:
-            # crear individuos aleatorios
-            for i in range(self.num_initial):
-                speed = utils.random_speed()
-                energy = utils.default_energy_for_speed(speed)
-                to_spawn.append((speed, energy))
+            # crear individuos: para la generación 1 todos deben tener los mismos atributos
+            if self.generation == 1:
+                # usar valores provistos en config si existen, sino elegir un speed aleatorio único
+                base_speed = getattr(self.config, "initial_speed", None)
+                if base_speed is None:
+                    base_speed = utils.random_speed()
+                base_energy = getattr(self.config, "initial_energy", None)
+                if base_energy is None:
+                    base_energy = utils.default_energy_for_speed(base_speed)
+                for i in range(self.num_initial):
+                    to_spawn.append((base_speed, base_energy))
+            else:
+                # generaciones posteriores: individuos con velocidad/energía aleatoria (energía inversa a velocidad)
+                for i in range(self.num_initial):
+                    speed = utils.random_speed()
+                    energy = utils.default_energy_for_speed(speed)
+                    to_spawn.append((speed, energy))
         else:
             for spec in spawn_list:
                 speed = spec.get("speed")
@@ -98,7 +112,7 @@ class GenerationAgent(Agent):
             await agent.start(auto_register=True)
             print(f"  started {jid} speed={speed:.2f} energy={energy:.2f}")
             # registrar
-            self.creatures_info[jid_base] = {"jid_full": jid, "foods_eaten": 0, "alive": True, "speed": speed}
+            self.creatures_info[jid_base] = {"jid_full": jid, "foods_eaten": 0, "alive": True, "speed": speed, "energy": energy}
             self.active_creature_jids.add(jid)
             self.spawned_agents.append(agent)
             i += 1
@@ -142,7 +156,14 @@ class GenerationAgent(Agent):
                     reply.body = json.dumps({"type": "eat_confirm", "jid": sender})
                     await self.send(reply)
                     print(f"  {sender} ate food at {fpos}")
-                # actualizar energía/estado no necesario aquí (creature lo maneja)
+                # actualizar energía/estado en registro local para poder preservar atributos
+                base = sender.split("@")[0]
+                info = self.agent.creatures_info.get(base)
+                if info is not None:
+                    info["energy"] = data.get("energy", info.get("energy"))
+                    # speed también puede actualizarse si el creature cambia (por seguridad)
+                    if "speed" in data:
+                        info["speed"] = data.get("speed")
                 # En cualquier caso, enviar al creature el target (la comida más cercana restante)
                 # para que busque de forma dirigida
                 target_msg = Message(to=str(msg.sender).split("/")[0])
@@ -167,6 +188,7 @@ class GenerationAgent(Agent):
                 if info is not None:
                     info["alive"] = False
                     info["foods_eaten"] = data.get("foods_eaten", info.get("foods_eaten", 0))
+                    info["energy"] = data.get("energy", info.get("energy"))
                 # eliminar de activos
                 jid_full = str(msg.sender).split("/")[0]
                 if jid_full in self.agent.active_creature_jids:
@@ -232,21 +254,32 @@ class GenerationAgent(Agent):
         for base, info in list(self.creatures_info.items()):
             foods = info.get("foods_eaten", 0)
             speed_parent = info.get("speed", utils.random_speed())
+            # Preserve reported energy, but if it's non-positive, reset to default for that speed
+            reported_energy = info.get("energy", None)
+            default_energy = utils.default_energy_for_speed(speed_parent)
+            if reported_energy is None:
+                energy_parent = default_energy
+            else:
+                try:
+                    # handle possible non-numeric
+                    energy_parent = float(reported_energy)
+                except Exception:
+                    energy_parent = default_energy
+            if energy_parent <= 0:
+                energy_parent = default_energy
             speeds.append(speed_parent)
             foods_list.append(foods)
             if foods == 0:
                 deaths += 1
                 continue
             elif foods == 1:
-                # parent survives, keep same speed
-                energy = utils.default_energy_for_speed(speed_parent)
-                next_specs.append({"speed": speed_parent, "energy": energy})
+                # parent survives, keep same speed and remaining energy
+                next_specs.append({"speed": speed_parent, "energy": energy_parent})
                 survivors += 1
             else:
                 # parent survives AND produces one child
-                energy = utils.default_energy_for_speed(speed_parent)
-                next_specs.append({"speed": speed_parent, "energy": energy})
-                # child with random speed
+                next_specs.append({"speed": speed_parent, "energy": energy_parent})
+                # child with random speed and energy (inverse relation)
                 child_speed = utils.random_speed()
                 child_energy = utils.default_energy_for_speed(child_speed)
                 next_specs.append({"speed": child_speed, "energy": child_energy})
@@ -273,6 +306,30 @@ class GenerationAgent(Agent):
             print(f"Failed writing summary CSV to {self.summary_file}: {e}")
             import traceback
             traceback.print_exc()
+
+        # escribir detalles por criatura
+        detail_header = ["generation", "jid_base", "jid_full", "speed", "energy", "foods_eaten", "alive", "is_reproducer"]
+        write_details_header = not os.path.exists(self.details_file)
+        try:
+            with open(self.details_file, "a", newline="", encoding="utf-8") as df:
+                dw = csv.writer(df)
+                if write_details_header:
+                    dw.writerow(detail_header)
+                for base, info in list(self.creatures_info.items()):
+                    jid_full = info.get("jid_full")
+                    speed = info.get("speed")
+                    energy = info.get("energy")
+                    foods = info.get("foods_eaten", 0)
+                    # alive flag refers to survival to next generation (foods>0),
+                    # not whether the agent process was still running at the snapshot.
+                    alive_flag = True if foods > 0 else False
+                    is_reproducer = True if foods >= 2 else False
+                    # format numbers sensibly
+                    speed_s = f"{speed:.3f}" if isinstance(speed, (int, float)) else str(speed)
+                    energy_s = f"{energy:.3f}" if isinstance(energy, (int, float)) else str(energy)
+                    dw.writerow([self.generation, base, jid_full, speed_s, energy_s, foods, alive_flag, is_reproducer])
+        except Exception as e:
+            print(f"Failed writing details CSV: {e}")
 
         # si no quedan individuos -> terminar simulación
         if len(next_specs) == 0 or self.generation >= self.max_generations:

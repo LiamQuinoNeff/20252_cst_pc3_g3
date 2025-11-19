@@ -21,3 +21,6 @@ class WorldConfig:
     seek_energy_multiplier: float = 1.3
     creature_password: str = "123456abcd."
     generation_password: str = "123456abcd."
+    # Optional initial attributes for generation 1. If None, a single random speed is chosen for gen1.
+    initial_speed: float = 1.0
+    initial_energy: float = 1.0
