@@ -42,12 +42,12 @@ class GenerationAgent(Agent):
         # flag para evitar llamadas reentrantes a _end_generation
         self._ending = False
 
-        # CSV FILE FOR SUMMARIES (UNCOMMENT IF UR NOT ON WSL)
-        # self.summary_file = os.path.join(os.path.dirname(__file__), "generation_summary.csv")
+        # comenten esta linea si usan wsl
+        self.summary_file = os.path.join(os.path.dirname(__file__), "generation_summary.csv")
 
-        # IF YOURE ON WSL COMMENT THE ABOVE AND UNCOMMENT BELOW
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        self.summary_file = os.path.join(script_dir, "generation_summary.csv")
+        # descomentar esto si estan usando wsl
+        #script_dir = os.path.dirname(os.path.abspath(__file__))
+        #self.summary_file = os.path.join(script_dir, "generation_summary.csv")
 
     # food placement and distance calculations delegated to utils
 
@@ -296,3 +296,4 @@ class GenerationAgent(Agent):
 
 if __name__ == "__main__":
     print("Este archivo define `GenerationAgent`. Ejecutarlo desde `hostAgent`.")
+
