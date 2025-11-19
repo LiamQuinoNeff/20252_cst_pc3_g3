@@ -1,0 +1,40 @@
+# PC3 — Mini-simulación de selección natural (SPADE)
+
+Pequeño proyecto con agentes SPADE que simula generaciones de criaturas que se mueven, comen y se reproducen según reglas simples.
+
+**Descripción**
+- Cada `GenerationAgent` crea una generación de `CreatureAgent` y distribuye comida en un área 2D.
+- Las criaturas informan su posición/energía periódicamente; si alcanzan comida la comen y aumentan su contador.
+- Reglas de supervivencia/reproducción (versión actual):
+  - 0 comidas -> muere
+  - 1 comida  -> sobrevive (padre permanece)
+  - >=2 comidas -> padre sobrevive y además genera 1 hijo
+- La simulación escribe un resumen por generación en `generation_summary.csv` (ubicado en la carpeta `pc3`).
+
+**Requisitos**
+- Python 3.8+ (se probó con entornos que contienen SPADE). 
+- SPADE instalado en el entorno virtual (ver `requirements.txt` del repo principal si existe).
+
+**Uso**
+1. Activar tu entorno virtual (si aplica).
+2. Abrir una terminal en `C:\SPADE\pc3`.
+3. Ejecutar:
+
+```powershell
+py hostAgent.py
+```
+
+La ejecución mostrará logs de cada criatura y generación. Al finalizar cada generación se añadirá/actualizará `generation_summary.csv`.
+
+**Archivos importantes en `pc3`**
+- `hostAgent.py` — lanzador / punto de entrada.
+- `generationAgent.py` — controla el ciclo de generaciones y la lógica de evaluación.
+- `creatureAgent.py` — definición del agente criatura (movimiento, energía, mensajes).
+- `utils.py` / `world.py` — utilidades y configuración del mundo.
+- `generation_summary.csv` — resumen por generación (omitido por defecto en git via `.gitignore`).
+
+**Licencia**
+Este proyecto se entrega bajo licencia MIT — adáptalo según prefieras.
+
+---
+Version inicial — generada automáticamente por el asistente de desarrollo.
