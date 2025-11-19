@@ -41,10 +41,15 @@ class GenerationAgent(Agent):
         self.spawned_agents = []
         # flag para evitar llamadas reentrantes a _end_generation
         self._ending = False
-        # CSV file for summaries
+
+        # comenten esta linea si usan wsl
         self.summary_file = os.path.join(os.path.dirname(__file__), "generation_summary.csv")
         # CSV file for per-creature details (appended each generation)
         self.details_file = os.path.join(os.path.dirname(__file__), "generation_details.csv")
+
+        # descomentar esto si estan usando wsl
+        #script_dir = os.path.dirname(os.path.abspath(__file__))
+        #self.summary_file = os.path.join(script_dir, "generation_summary.csv")
 
     # food placement and distance calculations delegated to utils
 
@@ -296,8 +301,11 @@ class GenerationAgent(Agent):
                 if write_header:
                     writer.writerow(header)
                 writer.writerow(row)
+            print(f"Summary written to {self.summary_file}")
         except Exception as e:
-            print(f"Failed writing summary CSV: {e}")
+            print(f"Failed writing summary CSV to {self.summary_file}: {e}")
+            import traceback
+            traceback.print_exc()
 
         # escribir detalles por criatura
         detail_header = ["generation", "jid_base", "jid_full", "speed", "energy", "foods_eaten", "alive", "is_reproducer"]
@@ -345,3 +353,4 @@ class GenerationAgent(Agent):
 
 if __name__ == "__main__":
     print("Este archivo define `GenerationAgent`. Ejecutarlo desde `hostAgent`.")
+
