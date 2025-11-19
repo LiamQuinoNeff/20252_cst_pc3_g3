@@ -89,7 +89,7 @@ class CreatureAgent(Agent):
 			if state.energy <= 0:
 				end_msg = Message(to=self.agent.generation_jid)
 				end_msg.set_metadata("performative", "inform")
-				end_msg.body = json.dumps({"type": "finished", "jid": state.jid, "foods_eaten": state.foods_eaten})
+				end_msg.body = json.dumps({"type": "finished", "jid": state.jid, "foods_eaten": state.foods_eaten, "energy": state.energy})
 				await self.send(end_msg)
 				await asyncio.sleep(0.1)
 				await self.agent.stop()
@@ -115,7 +115,7 @@ class CreatureAgent(Agent):
 				# La generación terminó: enviar status final y detener
 				end_msg = Message(to=self.agent.generation_jid)
 				end_msg.set_metadata("performative", "inform")
-				end_msg.body = json.dumps({"type": "finished", "jid": self.agent.state.jid, "foods_eaten": self.agent.state.foods_eaten})
+				end_msg.body = json.dumps({"type": "finished", "jid": self.agent.state.jid, "foods_eaten": self.agent.state.foods_eaten, "energy": self.agent.state.energy})
 				await self.send(end_msg)
 				await asyncio.sleep(0.05)
 				await self.agent.stop()
