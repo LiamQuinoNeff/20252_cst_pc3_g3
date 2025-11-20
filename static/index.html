@@ -1,20 +1,32 @@
-<!doctype html>
-<html>
+<\!DOCTYPE html>
+<html lang="es">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Creatures Visualizer</title>
-  <link rel="stylesheet" href="/static/style.css" />
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Simulación Evolutiva 3D</title>
+    <link rel="stylesheet" href="style.css" />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
 </head>
 <body>
-  <h1>Creatures Visualizer</h1>
-  <canvas id="world" width="600" height="600"></canvas>
-  <div id="legend" class="legend">
-    <span class="dot reproducer"></span> Reproducer (foods &ge; 2)
-    <span class="dot ate1"></span> Ate once
-    <span class="dot none"></span> No food
-    <span class="dot fooddot" style="margin-left:12px"></span> Food pellet
-  </div>
-  <script src="/static/app.js"></script>
+    <div id="stars"></div>
+    <div id="stars2"></div>
+    <div id="stars3"></div>
+
+    <div id="info">
+        <h2>Simulación Multi‑Agente SPADE</h2>
+        <div id="stats">
+            <span>Gen: <strong id="gen">-</strong></span>
+            <span>Criaturas: <strong id="creatures">0</strong></span>
+            <span>Comida: <strong id="food">0</strong></span>
+        </div>
+    </div>
+
+    <div id="container"></div>
+
+    <\!-- Three.js r149 como scripts clásicos -->
+    <script src="https://unpkg.com/three@0.149.0/build/three.min.js"></script>
+
+    <\!-- Nuestro código 3D -->
+    <script src="app.js?v=22"></script>
 </body>
 </html>

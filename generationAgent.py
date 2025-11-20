@@ -121,10 +121,10 @@ class GenerationAgent(Agent):
         except Exception:
             pass
 
-        # arrancar agentes criatura
+        # arrancar agentes criatura (crear todos primero, luego iniciarlos en paralelo)
+        agents_to_start = []
         i = 0
         for tup in to_spawn:
-            # soporta tupla tanto (speed, energy) como (speed, energy, size, sense)
             if len(tup) >= 4:
                 speed, energy, size, sense = tup[0], tup[1], tup[2], tup[3]
             else:
@@ -135,34 +135,34 @@ class GenerationAgent(Agent):
             jid = f"{jid_base}@localhost"
             passwd = "123456abcd."
             agent = CreatureAgent(jid, passwd)
-            # pasar parámetros iniciales
             agent.init_speed = speed
             agent.init_energy = energy
             agent.init_size = size
             agent.init_sense = sense
-            # pass host_jid so creatures can also report to Host UI
             agent.host_jid = getattr(self, "host_jid", None)
             agent.generation_jid = str(self.jid).split("/")[0]
-            # pasar tamaño de espacio y posición inicial aleatoria
             w, h = self.space_size
             agent.space_size = self.space_size
             agent.init_x = random.uniform(0, w)
             agent.init_y = random.uniform(0, h)
-            # pass world config so creature can use same parameters
             agent.config = self.config
+            self.spawned_map[jid] = agent
+            self.creatures_info[jid_base] = {"jid_full": jid, "foods_eaten": 0, "alive": True, "speed": speed, "energy": energy, "size": size, "sense": sense, "x": agent.init_x, "y": agent.init_y}
+            self.active_creature_jids.add(jid)
+            self.spawned_agents.append(agent)
+            agents_to_start.append((agent, jid, speed, energy, size, sense))
+            i += 1
+        
+        async def start_agent(agent_info):
+            agent, jid, speed, energy, size, sense = agent_info
             await agent.start(auto_register=True)
             print(f"  started {jid} speed={speed:.2f} energy={energy:.2f}")
             try:
                 logger.info(f"started {jid} speed={speed:.2f} energy={energy:.2f} size={size:.3f} sense={sense:.3f}")
             except Exception:
                 pass
-            # map for direct control
-            self.spawned_map[jid] = agent
-            # registrar (incluye tamaño y sense)
-            self.creatures_info[jid_base] = {"jid_full": jid, "foods_eaten": 0, "alive": True, "speed": speed, "energy": energy, "size": size, "sense": sense, "x": agent.init_x, "y": agent.init_y}
-            self.active_creature_jids.add(jid)
-            self.spawned_agents.append(agent)
-            i += 1
+        
+        await asyncio.gather(*[start_agent(info) for info in agents_to_start])
 
     class RecvBehav(CyclicBehaviour):
         async def run(self):
@@ -574,13 +574,37 @@ class GenerationAgent(Agent):
         # si no quedan individuos -> terminar simulación
         if len(next_specs) == 0 or self.generation >= self.max_generations:
             print("Simulation finished (no descendants or max generations reached).")
-            await self.stop()
+            print("Restarting simulation in 3 seconds...")
+            await asyncio.sleep(3)
+            await self._restart_simulation()
             return
 
         # spawn siguiente generación
         await asyncio.sleep(0.5)
         self._ending = False
         await self.spawn_generation(spawn_list=next_specs)
+
+    async def _restart_simulation(self):
+        """Reinicia la simulacion desde cero."""
+        print("Restarting simulation: stopping all agents...")
+        for agent in self.spawned_agents:
+            try:
+                await agent.stop()
+            except Exception as e:
+                print(f"Error stopping agent: {e}")
+
+        self.generation = 0
+        self.spawned_agents = []
+        self.spawned_map = {}
+        self.creatures_info = {}
+        self.active_creature_jids = set()
+        self.foods = []
+        self._ending = False
+        self.last_eat_time = time.time()
+
+        print("Restarting simulation: spawning generation 1...")
+        await asyncio.sleep(1)
+        await self.spawn_generation()
 
     async def setup(self):
         print(f"GenerationAgent {str(self.jid)} started")
