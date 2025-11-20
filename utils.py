@@ -14,10 +14,32 @@ def distance(a, b):
 
 
 def default_energy_for_speed(speed, k=1.0):
-    """Return default energy given speed using inverse relation energy = k / speed."""
+    """Backward-compatible wrapper: energy = k / speed (kept for older callers)."""
     if speed == 0:
         return k
     return k / speed
+
+
+def random_size(min_size=0.6, max_size=1.8):
+    return random.uniform(min_size, max_size)
+
+
+def random_sense(min_sense=0.0, max_sense=2.0):
+    return random.uniform(min_sense, max_sense)
+
+
+def default_energy(speed, size, energy_base=1.0, min_speed=0.1):
+    """Compute default initial energy as proportional to size^3 and inverse to speed.
+
+    energy = energy_base * (size ** 3) / max(abs(speed), min_speed)
+    return energy"""
+
+
+def energy_drain_per_tick(size, speed, sense, energy_scale=0.02, sense_scale=0.02):
+    """Compute energy drain per time step using proposed formula.
+
+    drain = energy_scale * (size ** 3 * (speed ** 2)) + sense_scale * sense
+    return drain"""
 
 
 def random_speed(min_s=0.5, max_s=2.0):
