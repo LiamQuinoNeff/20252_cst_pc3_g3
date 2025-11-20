@@ -1,10 +1,124 @@
-body{font-family: Arial, Helvetica, sans-serif; background:#f5f7fa; color:#222; margin:12px}
-canvas{border:1px solid #ccc; background:white; display:block}
-h1{font-size:18px; margin-bottom:8px}
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
 
-.legend{margin-top:8px; font-size:13px}
-.legend .dot{display:inline-block; width:12px; height:12px; border-radius:50%; margin:0 6px; vertical-align:middle}
-.legend .reproducer{background:#cc2222}
-.legend .ate1{background:#0066cc}
-.legend .none{background:#444444}
-.legend .fooddot{background:#2e8b57}
+html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+/* Fondo base: espacio muy oscuro */
+body {
+    background: radial-gradient(circle at 50% 50%, #020617 0, #020617 40%, #00010a 100%);
+    color: #fff;
+    position: relative;
+}
+
+/* Sol / núcleo de galaxia */
+body::before {
+    content: "";
+    position: fixed;
+    inset: -20%;
+    background:
+        radial-gradient(circle at 50% 55%,
+            rgba(255, 255, 220, 0.95) 0,
+            rgba(255, 255, 210, 0.7) 4%,
+            rgba(253, 224, 171, 0.55) 9%,
+            rgba(59, 130, 246, 0.4) 18%,
+            transparent 38%),
+        radial-gradient(circle at 15% 20%, rgba(56, 189, 248, 0.18), transparent 60%),
+        radial-gradient(circle at 80% 75%, rgba(129, 140, 248, 0.22), transparent 65%);
+    mix-blend-mode: screen;
+    opacity: 0.95;
+    pointer-events: none;
+    z-index: 0;
+}
+
+/* Estrellas en capas, con ligero parallax */
+#stars,
+#stars2,
+#stars3 {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 220%;
+    height: 220%;
+    background-repeat: repeat;
+    pointer-events: none;
+    mix-blend-mode: screen;
+    z-index: 0;
+}
+
+#stars {
+    opacity: 0.7;
+    background-image: radial-gradient(1px 1px at 20px 30px, #ffffffcc, transparent 60%);
+    animation: moveStars 90s linear infinite;
+}
+
+#stars2 {
+    opacity: 0.5;
+    background-image: radial-gradient(1.6px 1.6px at 40px 80px, #a5b4fccc, transparent 60%);
+    animation: moveStars 140s linear infinite;
+}
+
+#stars3 {
+    opacity: 0.4;
+    background-image: radial-gradient(2.1px 2.1px at 80px 50px, #fbbf24cc, transparent 60%);
+    animation: moveStars 200s linear infinite;
+}
+
+@keyframes moveStars {
+    from { transform: translate3d(0, 0, 0); }
+    to   { transform: translate3d(-50%, -50%, 0); }
+}
+
+#container {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    z-index: 1;
+}
+
+#info {
+    position: absolute;
+    top: 18px;
+    left: 18px;
+    z-index: 10;
+    background: rgba(6, 10, 32, 0.92);
+    padding: 10px 14px;
+    border-radius: 10px;
+    backdrop-filter: blur(14px);
+    box-shadow: 0 12px 38px rgba(0, 0, 0, 0.7);
+    border: 1px solid rgba(148, 163, 184, 0.6);
+}
+
+#info h2 {
+    margin-bottom: 4px;
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+}
+
+#stats {
+    display: flex;
+    gap: 10px;
+    font-size: 12px;
+    color: #e5e7eb;
+}
+
+#stats span {
+    opacity: 0.9;
+}
+
+#stats strong {
+    color: #a5b4fc;
+    font-size: 13px;
+}
+
+canvas {
+    display: block;
+}
