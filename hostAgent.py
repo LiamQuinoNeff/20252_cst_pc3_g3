@@ -9,6 +9,9 @@ import os
 import json
 import webbrowser
 import time
+from logger_setup import get_logger
+
+logger = get_logger('host')
 
 class HostAgent(Agent):
     class RecvBehav(CyclicBehaviour):
@@ -20,9 +23,9 @@ class HostAgent(Agent):
                 data = json.loads(msg.body)
             except Exception:
                 return
-            # Debug log every received event for tracing
+            # Registrar en nivel DEBUG cada evento recibido para trazabilidad
             try:
-                print(f"Host received: {data}")
+                logger.info(f"Host received: {data}")
             except Exception:
                 pass
 
@@ -30,7 +33,18 @@ class HostAgent(Agent):
                 jid = data.get("jid")
                 if jid is None:
                     return
-                # store minimal info for web interface
+                # Si este jid fue eliminado hace muy poco, ignorar el estado entrante
+                try:
+                    cutoff = time.time() - 3.0
+                    if hasattr(self.agent, 'removals'):
+                        for r in getattr(self.agent, 'removals'):
+                            if r.get('jid') == jid and r.get('time', 0) >= cutoff:
+                                # ignore stale status arriving after removal
+                                logger.info(f"Host: ignoring status for recently removed {jid}")
+                                return
+                except Exception:
+                    pass
+                # almacenar información mínima para la interfaz web
                 self.agent.fishes[jid] = {
                     "jid": jid,
                     "x": data.get("x", 0),
@@ -42,13 +56,13 @@ class HostAgent(Agent):
                     "sense": data.get("sense", None),
                 }
             elif data.get("type") == "generation_start":
-                # clear previous fishes at the start of a new generation
+                # limpiar las criaturas previas al iniciar una nueva generación
                 try:
                     # keep a short history of removals
                     if not hasattr(self.agent, 'removals'):
                         self.agent.removals = []
                     self.agent.fishes = {}
-                    print(f"Host: generation {data.get('generation')} started — cleared fishes")
+                    logger.info(f"Host: generation {data.get('generation')} started — cleared fishes")
                 except Exception:
                     pass
             elif data.get("type") in ("finished", "creature_removed"):
@@ -77,7 +91,7 @@ class HostAgent(Agent):
                         else:
                             # still append without coords so frontend can ignore if missing
                             self.agent.removals.append({"jid": jid, "time": time.time(), "reason": reason, "killed_by": killed_by})
-                        print(f"Host: removed {jid} reason={reason} killed_by={killed_by}")
+                        logger.info(f"Host: removed {jid} reason={reason} killed_by={killed_by}")
                         # trim old removals (keep last 5 seconds)
                         cutoff = time.time() - 5.0
                         self.agent.removals = [r for r in self.agent.removals if r.get('time', 0) >= cutoff]
@@ -107,7 +121,7 @@ class HostAgent(Agent):
             return aiohttp.web.json_response({"fishes": fishes, "foods": foods, "space_size": self.gen.space_size if hasattr(self, "gen") else (30, 30), "removals": removals})
 
         app.router.add_get('/fishes', fishes_controller)
-        # serve static files
+        # servir archivos estáticos
         if os.path.isdir(static_folder):
             app.router.add_static('/static/', path=static_folder, name='static')
 
@@ -118,30 +132,30 @@ class HostAgent(Agent):
         url = f"http://localhost:{port}/static/index.html"
         print(f"Web UI available at {url} (bound to 0.0.0.0)")
         try:
-            # try to open the UI in the default browser
+            # intentar abrir la UI en el navegador por defecto
             webbrowser.open(url)
         except Exception:
             pass
-        # keep runner reference to stop later
+        # conservar referencia del runner para detenerlo más tarde
         self._web_runner = runner
 
     async def setup(self):
         print("Host starting: creating GenerationAgent")
         cfg = WorldConfig()
-        # mapping jid -> status for frontend
+        # mapeo jid -> estado para el frontend
         self.fishes = {}
-        # add behaviour to receive statuses from creatures (we expect creatures to also send to host)
+        # añadir comportamiento para recibir estados de las criaturas (se espera que las criaturas también reporten al host)
         self.add_behaviour(self.RecvBehav())
-        # start web server in background early so UI can connect and host can receive removal notifications
+        # iniciar el servidor web en segundo plano pronto para que la UI pueda conectarse y el host reciba notificaciones de eliminación
         asyncio.create_task(self._start_web(port=10000))
 
-        # create GenerationAgent after host behaviours are registered to avoid missed messages
+        # crear GenerationAgent después de registrar los behaviours del host para evitar perder mensajes
         gen = GenerationAgent("generation@localhost", cfg.generation_password, num_initial=cfg.num_initial, food_count=cfg.food_count, space_size=cfg.space_size, max_generations=cfg.max_generations)
-        # ensure GenerationAgent uses the same full config (detection_radius, energy cost, etc.)
+        # asegurar que GenerationAgent use la misma configuración completa (detection_radius, energy cost, etc.)
         gen.config = cfg
-        # let generation know how to contact host for frontend updates
+        # indicar a generation cómo contactar al host para actualizaciones del frontend
         gen.host_jid = str(self.jid).split("/")[0]
-        # keep reference for clean shutdown
+        # mantener referencia para un apagado ordenado
         self.gen = gen
         await gen.start(auto_register=True)
         print("GenerationAgent started")

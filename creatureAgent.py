@@ -7,6 +7,9 @@ from spade.agent import Agent
 from spade.behaviour import PeriodicBehaviour, CyclicBehaviour
 from spade.message import Message
 import utils
+from logger_setup import get_logger
+
+logger = get_logger('creature')
 
 
 @dataclass
@@ -22,16 +25,17 @@ class CreatureState:
 
 
 class CreatureAgent(Agent):
-	"""Agent que representa una criatura en la simulación.
+	"""Agente que representa una criatura en la simulación.
 
-	Comportamientos:
-	- Reportar estado periódicamente a GenerationAgent
-	- Escuchar mensajes de confirmación (comer, fin de generación)
+	Comportamientos principales:
+	- Reportar estado periódicamente al `GenerationAgent`.
+	- Responder a mensajes de confirmación (comer) y al fin de generación.
+	- Moverse en el espacio y consumir energía según tamaño/velocidad/sense.
 	"""
 
 	class ReportBehav(PeriodicBehaviour):
 		async def run(self):
-			# Moverse aleatoriamente según speed
+			# Moverse (hacia target si existe, o aleatoriamente) según `speed`
 			state = self.agent.state
 			# movimiento aleatorio: dirección uniforme
 			# Si tiene un objetivo, moverse hacia él; si no, moverse aleatoriamente
@@ -63,7 +67,7 @@ class CreatureAgent(Agent):
 				# clamp
 				state.x = max(0.0, min(w, state.x))
 				state.y = max(0.0, min(h, state.y))
-			# reducir energía según la nueva fórmula: energy_scale*(size^3*speed^2) + sense_scale*sense
+			# reducir energía según la fórmula: energy_scale*(size^3*speed^2) + sense_scale*sense
 			config = getattr(self.agent, "config", None)
 			if config is not None:
 				energy_scale = getattr(config, "energy_scale", 0.02)
@@ -78,7 +82,7 @@ class CreatureAgent(Agent):
 				drain *= mult
 			state.energy -= drain
 
-			# Construir mensaje JSON con estado
+			# Construir y enviar mensaje JSON con el estado actual
 			payload = {
 				"type": "status",
 				"jid": state.jid,
@@ -94,7 +98,7 @@ class CreatureAgent(Agent):
 			msg.body = json.dumps(payload)
 			await self.send(msg)
 
-			# Also report to host UI if configured
+			# También reportar al Host UI si está configurado
 			host_jid = getattr(self.agent, "host_jid", None)
 			if host_jid:
 				host_msg = Message(to=host_jid)
@@ -105,12 +109,16 @@ class CreatureAgent(Agent):
 				except Exception:
 					pass
 
-			# Si la energía se acabó, notificar y detener
+			# Si la energía se agotó, notificar finalización y detener el agente
 			if state.energy <= 0:
 				end_msg = Message(to=self.agent.generation_jid)
 				end_msg.set_metadata("performative", "inform")
 				end_msg.body = json.dumps({"type": "finished", "jid": state.jid, "foods_eaten": state.foods_eaten, "energy": state.energy, "size": state.size, "sense": state.sense})
 				await self.send(end_msg)
+				try:
+					logger.info(f"Creature {state.jid} finished energy={state.energy:.3f} foods={state.foods_eaten} size={state.size:.3f} sense={state.sense:.3f}")
+				except Exception:
+					pass
 				# also inform host UI if present
 				host_jid = getattr(self.agent, "host_jid", None)
 				if host_jid:
@@ -135,9 +143,9 @@ class CreatureAgent(Agent):
 			except Exception:
 				return
 
-			# Manejar confirmación de comida
+			# Manejar confirmación de comida recibida
 			if data.get("type") == "eat_confirm" and data.get("jid") == self.agent.state.jid:
-				# incrementa contador de comidas y aumentar energía ligeramente
+				# incrementar contador de comidas y aumentar la energía según `energy_gain`
 				self.agent.state.foods_eaten += 1
 				energy_gain = None
 				if "energy_gain" in data:
@@ -152,7 +160,7 @@ class CreatureAgent(Agent):
 				self.agent.state.energy += energy_gain
 				# enviar ack opcional
 			elif data.get("type") == "generation_end":
-				# La generación terminó: enviar status final y detener
+				# La generación terminó: enviar estado final (`finished`) y detener
 				end_msg = Message(to=self.agent.generation_jid)
 				end_msg.set_metadata("performative", "inform")
 				end_msg.body = json.dumps({"type": "finished", "jid": self.agent.state.jid, "foods_eaten": self.agent.state.foods_eaten, "energy": self.agent.state.energy, "size": self.agent.state.size, "sense": self.agent.state.sense})
@@ -170,7 +178,7 @@ class CreatureAgent(Agent):
 				await asyncio.sleep(0.05)
 				await self.agent.stop()
 			elif data.get("type") == "target":
-				# Se le indica la posición de la comida más cercana
+				# Se indica la posición de la comida más cercana (target)
 				tx = data.get("x")
 				ty = data.get("y")
 				if tx is not None and ty is not None:
@@ -203,6 +211,10 @@ class CreatureAgent(Agent):
 		self.state.y = getattr(self, "init_y", self.state.y)
 
 		print(f"Creature {jid} started — speed={self.state.speed:.2f} energy={self.state.energy:.2f} size={self.state.size:.2f} sense={self.state.sense:.2f}")
+		try:
+			logger.info(f"Creature {jid} started speed={self.state.speed:.2f} energy={self.state.energy:.2f} size={self.state.size:.2f} sense={self.state.sense:.2f}")
+		except Exception:
+			pass
 
 		# Reportar periódicamente (usar periodo del world config si existe, añadir jitter)
 		period = 1.0

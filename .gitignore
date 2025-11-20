@@ -2,5 +2,6 @@
 __pycache__/
 *.csv
 *.pyc
-*.static
+static/
+run.log
 server.db

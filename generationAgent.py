@@ -11,6 +11,9 @@ from spade.behaviour import CyclicBehaviour, PeriodicBehaviour
 from spade.message import Message
 
 from creatureAgent import CreatureAgent
+from logger_setup import get_logger
+
+logger = get_logger('generation')
 
 
 class GenerationAgent(Agent):
@@ -43,8 +46,8 @@ class GenerationAgent(Agent):
         self.spawned_map = {}
         # flag para evitar llamadas reentrantes a _end_generation
         self._ending = False
-        # CSV file for summaries
-        # create report directory and CSV file paths
+            # archivos CSV para reportes
+            # crear directorio de reportes y rutas de archivos CSV
         self.report_dir = os.path.join(os.path.dirname(__file__), "report")
         os.makedirs(self.report_dir, exist_ok=True)
         self.summary_file = os.path.join(self.report_dir, "generation_summary.csv")
@@ -53,7 +56,7 @@ class GenerationAgent(Agent):
         # CSV file for predation events
         self.predation_file = os.path.join(self.report_dir, "predation_events.csv")
 
-    # food placement and distance calculations delegated to utils
+    # colocación de comida y cálculos de distancia delegados a `utils`
 
     async def spawn_generation(self, spawn_list=None):
         """Crea y arranca las criaturas para la generación actual.
@@ -107,14 +110,21 @@ class GenerationAgent(Agent):
             for spec in spawn_list:
                 speed = spec.get("speed")
                 energy = spec.get("energy")
-                to_spawn.append((speed, energy))
+                # preserve size and sense when provided; otherwise randomize
+                size = spec.get("size", utils.random_size())
+                sense = spec.get("sense", utils.random_sense())
+                to_spawn.append((speed, energy, size, sense))
 
         print(f"Generation {self.generation}: spawning {len(to_spawn)} creatures, food={len(self.foods)}")
+        try:
+            logger.info(f"Generation {self.generation}: spawning {len(to_spawn)} creatures, food={len(self.foods)}")
+        except Exception:
+            pass
 
         # arrancar agentes criatura
         i = 0
         for tup in to_spawn:
-            # support tuple either (speed, energy) or (speed, energy, size, sense)
+            # soporta tupla tanto (speed, energy) como (speed, energy, size, sense)
             if len(tup) >= 4:
                 speed, energy, size, sense = tup[0], tup[1], tup[2], tup[3]
             else:
@@ -142,6 +152,10 @@ class GenerationAgent(Agent):
             agent.config = self.config
             await agent.start(auto_register=True)
             print(f"  started {jid} speed={speed:.2f} energy={energy:.2f}")
+            try:
+                logger.info(f"started {jid} speed={speed:.2f} energy={energy:.2f} size={size:.3f} sense={sense:.3f}")
+            except Exception:
+                pass
             # map for direct control
             self.spawned_map[jid] = agent
             # registrar (incluye tamaño y sense)
@@ -189,6 +203,10 @@ class GenerationAgent(Agent):
                     reply.body = json.dumps({"type": "eat_confirm", "jid": sender})
                     await self.send(reply)
                     print(f"  {sender} ate food at {fpos}")
+                    try:
+                        logger.info(f"{sender} ate food at {fpos}")
+                    except Exception:
+                        pass
                 # actualizar energía/estado en registro local para poder preservar atributos
                 base = sender.split("@")[0]
                 info = self.agent.creatures_info.get(base)
@@ -236,7 +254,7 @@ class GenerationAgent(Agent):
                         # distance between predator (pos) and prey
                         d = utils.distance(pos, (ox, oy))
                         if d <= effective_attack_radius and predator_size >= (attack_size_ratio * float(o_size)):
-                            # predator successfully kills prey
+                                    # el depredador mata exitosamente a la presa
                             prey_jid = other_info.get("jid_full")
                             # mark prey as dead in registry
                             other_info["alive"] = False
@@ -254,7 +272,11 @@ class GenerationAgent(Agent):
                             info["foods_eaten"] = info.get("foods_eaten", 0) + 1
                             info["energy"] = float(info.get("energy", 0)) + gained
                             print(f"  {sender} predated on {other_base} at d={d:.2f}, energy+={gained:.2f}")
-                            # send eat_confirm to predator so the local agent updates its state as well
+                            try:
+                                logger.info(f"{sender} predated on {other_base} at d={d:.2f}, energy+={gained:.2f}")
+                            except Exception:
+                                pass
+                            # enviar `eat_confirm` al depredador para que el agente local también actualice su estado
                             try:
                                 predator_jid_full = str(msg.sender).split("/")[0]
                             except Exception:
@@ -263,7 +285,7 @@ class GenerationAgent(Agent):
                             pred_ack.set_metadata("performative", "inform")
                             pred_ack.body = json.dumps({"type": "eat_confirm", "jid": sender, "energy_gain": gained, "prey": other_base})
                             await self.send(pred_ack)
-                            # record predation event to CSV
+                            # registrar evento de depredación en CSV
                             try:
                                 write_header = not os.path.exists(self.agent.predation_file)
                                 with open(self.agent.predation_file, "a", newline="", encoding="utf-8") as pf:
@@ -272,8 +294,8 @@ class GenerationAgent(Agent):
                                         pw.writerow(["generation", "time", "predator_base", "predator_jid", "prey_base", "prey_jid", "energy_gained", "pred_x", "pred_y", "prey_x", "prey_y", "distance"])
                                     pw.writerow([self.agent.generation, time.time(), base, predator_jid_full, other_base, prey_jid, f"{gained:.3f}", f"{pos[0]:.3f}", f"{pos[1]:.3f}", f"{ox:.3f}", f"{oy:.3f}", f"{d:.3f}"])
                             except Exception as e:
-                                print(f"Failed writing predation event: {e}")
-                            # instruct prey to end (killed). Prefer stopping the agent
+                                logger.error(f"Failed writing predation event: {e}")
+                            # instruir a la presa para que termine (muerta). Preferir detener el agente
                             if prey_jid:
                                 prey_agent = self.agent.spawned_map.get(prey_jid)
                                 if prey_agent is not None:
@@ -282,14 +304,14 @@ class GenerationAgent(Agent):
                                         await prey_agent.stop()
                                     except Exception:
                                         pass
-                                    # remove mapping and active set entry if present
+                                    # eliminar el mapeo y la entrada del conjunto activo si están presentes
                                     self.agent.spawned_map.pop(prey_jid, None)
                                     if prey_jid in self.agent.active_creature_jids:
                                         try:
                                             self.agent.active_creature_jids.remove(prey_jid)
                                         except Exception:
                                             pass
-                                    # notify host UI that prey was removed (killed)
+                                    # notificar al Host UI que la presa fue eliminada (killed)
                                     try:
                                         host_j = getattr(self.agent, "host_jid", None)
                                         if host_j:
@@ -300,12 +322,12 @@ class GenerationAgent(Agent):
                                     except Exception:
                                         pass
                                 else:
-                                    # fallback: send generation_end if we don't have agent object
+                                    # alternativa: enviar generation_end si no tenemos el objeto agente
                                     endm = Message(to=prey_jid)
                                     endm.set_metadata("performative", "inform")
                                     endm.body = json.dumps({"type": "generation_end", "killed_by": sender})
                                     await self.send(endm)
-                                    # also notify host UI in fallback
+                                    # también notificar al Host UI en la ruta alternativa
                                     try:
                                         host_j = getattr(self.agent, "host_jid", None)
                                         if host_j:
@@ -399,6 +421,10 @@ class GenerationAgent(Agent):
             return
         self._ending = True
         print(f"Generation {self.generation} ending. Evaluating population...")
+        try:
+            logger.info(f"Generation {self.generation} ending. Evaluating population...")
+        except Exception:
+            pass
 
         # pedir a las criaturas activas que finalicen y esperar sus informes
         for jid in list(self.active_creature_jids):
@@ -455,19 +481,9 @@ class GenerationAgent(Agent):
             speed_parent = info.get("speed", utils.random_speed())
             size_parent = info.get("size", utils.random_size())
             sense_parent = info.get("sense", utils.random_sense())
-            # Preserve reported energy, but if it's non-positive, reset to default for that speed
-            reported_energy = info.get("energy", None)
+            # Reset parent energy for next generation to the default for their speed
             default_energy = utils.default_energy_for_speed(speed_parent)
-            if reported_energy is None:
-                energy_parent = default_energy
-            else:
-                try:
-                    # handle possible non-numeric
-                    energy_parent = float(reported_energy)
-                except Exception:
-                    energy_parent = default_energy
-            if energy_parent <= 0:
-                energy_parent = default_energy
+            energy_parent = default_energy
             speeds.append(speed_parent)
             foods_list.append(foods)
             sizes.append(size_parent)
@@ -481,11 +497,13 @@ class GenerationAgent(Agent):
                 continue
             elif foods == 1:
                 # parent survives, keep same speed and remaining energy
+                # keep speed, size and sense; reset energy to default
                 next_specs.append({"speed": speed_parent, "energy": energy_parent, "size": size_parent, "sense": sense_parent})
                 survivors_bases.append(base)
                 survivors += 1
             else:
                 # parent survives AND produces one child
+                # parent keeps same speed/size/sense and resets energy
                 next_specs.append({"speed": speed_parent, "energy": energy_parent, "size": size_parent, "sense": sense_parent})
                 survivors_bases.append(base)
                 # child with random speed and energy (inverse relation)
