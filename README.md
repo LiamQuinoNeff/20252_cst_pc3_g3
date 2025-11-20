@@ -191,3 +191,21 @@ Los parámetros principales del mundo pueden modificarse en WorldConfig. Algunos
 - Control de depredación
 
 Si se desea mayor flexibilidad, ciertos valores actualmente codificados, como el tiempo de protección de reintroducción, pueden trasladarse a WorldConfig.
+
+------------------------------------------------------------------------------------------------------------------------------------------------
+**AUTORES**
+------------------------------------------------------------------------------------------------------------------------------------------------
+
+| Nombre | Código de estudiante |
+|---|---|
+| Nathaly Eliane Anaya Vadillo | U202210644 |
+| Leonardo Leoncio Bravo Ricapa | U20211c688 |
+| Ariana Graciela Quelopana Puppo | U202122430 |
+| Liam Mikael Quino Neff | U20221E167 |
+
+
+------------------------------------------------------------------------------------------------------------------------------------------------
+**LICENCIA**
+------------------------------------------------------------------------------------------------------------------------------------------------
+
+Este proyecto se publica bajo la licencia MIT. Consulta el archivo `LICENSE` para el texto completo.
