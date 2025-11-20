@@ -94,12 +94,33 @@ class CreatureAgent(Agent):
 			msg.body = json.dumps(payload)
 			await self.send(msg)
 
+			# Also report to host UI if configured
+			host_jid = getattr(self.agent, "host_jid", None)
+			if host_jid:
+				host_msg = Message(to=host_jid)
+				host_msg.set_metadata("performative", "inform")
+				host_msg.body = json.dumps(payload)
+				try:
+					await self.send(host_msg)
+				except Exception:
+					pass
+
 			# Si la energía se acabó, notificar y detener
 			if state.energy <= 0:
 				end_msg = Message(to=self.agent.generation_jid)
 				end_msg.set_metadata("performative", "inform")
 				end_msg.body = json.dumps({"type": "finished", "jid": state.jid, "foods_eaten": state.foods_eaten, "energy": state.energy, "size": state.size, "sense": state.sense})
 				await self.send(end_msg)
+				# also inform host UI if present
+				host_jid = getattr(self.agent, "host_jid", None)
+				if host_jid:
+					host_end = Message(to=host_jid)
+					host_end.set_metadata("performative", "inform")
+					host_end.body = end_msg.body
+					try:
+						await self.send(host_end)
+					except Exception:
+						pass
 				await asyncio.sleep(0.1)
 				await self.agent.stop()
 
@@ -136,6 +157,16 @@ class CreatureAgent(Agent):
 				end_msg.set_metadata("performative", "inform")
 				end_msg.body = json.dumps({"type": "finished", "jid": self.agent.state.jid, "foods_eaten": self.agent.state.foods_eaten, "energy": self.agent.state.energy, "size": self.agent.state.size, "sense": self.agent.state.sense})
 				await self.send(end_msg)
+				# also inform host UI if present
+				host_jid = getattr(self.agent, "host_jid", None)
+				if host_jid:
+					host_end = Message(to=host_jid)
+					host_end.set_metadata("performative", "inform")
+					host_end.body = end_msg.body
+					try:
+						await self.send(host_end)
+					except Exception:
+						pass
 				await asyncio.sleep(0.05)
 				await self.agent.stop()
 			elif data.get("type") == "target":

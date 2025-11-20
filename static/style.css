@@ -1,3 +1,10 @@
 body{font-family: Arial, Helvetica, sans-serif; background:#f5f7fa; color:#222; margin:12px}
 canvas{border:1px solid #ccc; background:white; display:block}
 h1{font-size:18px; margin-bottom:8px}
+
+.legend{margin-top:8px; font-size:13px}
+.legend .dot{display:inline-block; width:12px; height:12px; border-radius:50%; margin:0 6px; vertical-align:middle}
+.legend .reproducer{background:#cc2222}
+.legend .ate1{background:#0066cc}
+.legend .none{background:#444444}
+.legend .fooddot{background:#2e8b57}

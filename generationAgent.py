@@ -63,6 +63,16 @@ class GenerationAgent(Agent):
         """
         self.generation += 1
         self.foods = utils.place_food(self.food_count, self.space_size)
+        # notify host UI that a new generation starts so it can clear previous creatures
+        try:
+            host_j = getattr(self, "host_jid", None)
+            if host_j:
+                nm = Message(to=host_j)
+                nm.set_metadata("performative", "inform")
+                nm.body = json.dumps({"type": "generation_start", "generation": self.generation})
+                await self.send(nm)
+        except Exception:
+            pass
         self.creatures_info = {}
         self.active_creature_jids = set()
 
@@ -120,6 +130,8 @@ class GenerationAgent(Agent):
             agent.init_energy = energy
             agent.init_size = size
             agent.init_sense = sense
+            # pass host_jid so creatures can also report to Host UI
+            agent.host_jid = getattr(self, "host_jid", None)
             agent.generation_jid = str(self.jid).split("/")[0]
             # pasar tamaño de espacio y posición inicial aleatoria
             w, h = self.space_size
@@ -277,12 +289,32 @@ class GenerationAgent(Agent):
                                             self.agent.active_creature_jids.remove(prey_jid)
                                         except Exception:
                                             pass
+                                    # notify host UI that prey was removed (killed)
+                                    try:
+                                        host_j = getattr(self.agent, "host_jid", None)
+                                        if host_j:
+                                            rem = Message(to=host_j)
+                                            rem.set_metadata("performative", "inform")
+                                            rem.body = json.dumps({"type": "creature_removed", "jid": prey_jid, "reason": "killed", "killed_by": sender})
+                                            await self.send(rem)
+                                    except Exception:
+                                        pass
                                 else:
                                     # fallback: send generation_end if we don't have agent object
                                     endm = Message(to=prey_jid)
                                     endm.set_metadata("performative", "inform")
                                     endm.body = json.dumps({"type": "generation_end", "killed_by": sender})
                                     await self.send(endm)
+                                    # also notify host UI in fallback
+                                    try:
+                                        host_j = getattr(self.agent, "host_jid", None)
+                                        if host_j:
+                                            rem = Message(to=host_j)
+                                            rem.set_metadata("performative", "inform")
+                                            rem.body = json.dumps({"type": "creature_removed", "jid": prey_jid, "reason": "killed", "killed_by": sender})
+                                            await self.send(rem)
+                                    except Exception:
+                                        pass
                             # do not allow multiple predators to eat the same prey (we marked it dead)
                 # En cualquier caso, enviar al creature el target (la comida más cercana restante)
                 # para que busque de forma dirigida
@@ -387,6 +419,21 @@ class GenerationAgent(Agent):
                 except Exception:
                     pass
             self.spawned_agents = []
+
+        # Notify host UI that remaining active creatures are being removed (generation end)
+        try:
+            host_j = getattr(self, "host_jid", None)
+            if host_j:
+                for jid_full in list(self.active_creature_jids):
+                    try:
+                        rem = Message(to=host_j)
+                        rem.set_metadata("performative", "inform")
+                        rem.body = json.dumps({"type": "creature_removed", "jid": jid_full, "reason": "generation_end"})
+                        await self.send(rem)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
 
         # asegurar que active_creature_jids está vacio
         self.active_creature_jids = set()
