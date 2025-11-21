@@ -4,9 +4,9 @@ from typing import Tuple
 
 @dataclass
 class WorldConfig:
-    num_initial: int = 10
+    num_initial: int = 40
     # valores por defecto equilibrados: comida moderada y tamaño del mundo moderado para permitir selección
-    food_count: int = 20
+    food_count: int = 40
     space_size: Tuple[int, int] = (30, 30)
     max_generations: int = 10
     # radio de detección moderado para que las criaturas deban acercarse razonablemente
@@ -29,11 +29,11 @@ class WorldConfig:
     size_max: float = 1.8
     sense_min: float = 0.0
     sense_max: float = 2.0
-    initial_size: float = None
-    initial_sense: float = None
+    initial_size: float = 0.8
+    initial_sense: float = 1.0
 
     # Escalas de energía y detección para convertir magnitudes de la fórmula a energía por tick
-    energy_scale: float = 0.02
+    energy_scale: float = 0.03
     sense_scale: float = 0.02
     # Energía ganada al consumir un pellet de comida (escala aplicada al volumen del presa)
     food_energy_scale: float = 0.8

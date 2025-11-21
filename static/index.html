@@ -1,4 +1,3 @@
-<\!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8" />
@@ -18,8 +17,53 @@
             <span>Gen: <strong id="gen">-</strong></span>
             <span>Criaturas: <strong id="creatures">0</strong></span>
             <span>Comida: <strong id="food">0</strong></span>
+            <span>Tiempo universo: <strong id="simtime">0.0s</strong></span>
+            <span>Tiempo real: <strong id="realtime">0.0s</strong></span>
+        </div>
+
+        <div id="blob-panel">
+            <h3>Blob seleccionado</h3>
+            <div id="blob-panel-body">
+                <p id="blob-none">Haz click en un blob para ver sus estadísticas.</p>
+                <div id="blob-stats" style="display:none;">
+                    <div class="blob-stat-row"><span class="label">ID</span><span class="value" id="blob-id">-</span></div>
+                    <div class="blob-stat-row"><span class="label">Gen</span><span class="value" id="blob-gen">-</span></div>
+                    <div class="blob-stat-row"><span class="label">Velocidad</span><span class="value" id="blob-speed">-</span></div>
+                    <div class="blob-stat-row"><span class="label">Energía</span><span class="value" id="blob-energy">-</span></div>
+                    <div class="blob-stat-row"><span class="label">Comida comida</span><span class="value" id="blob-foods">-</span></div>
+                    <div class="blob-stat-row"><span class="label">Asesinatos</span><span class="value" id="blob-kills">0</span></div>
+                </div>
+            </div>
         </div>
     </div>
+
+    <div id="curse-tool" title="Arrastra para sacrificar blobs">
+        <span class="curse-icon">✶</span>
+    </div>
+
+    <div id="velocity-chart">
+        <h3>Distribución de Velocidades</h3>
+        <div id="velocity-chart-bars"></div>
+        <div class="chart-labels">
+            <span>Lento</span>
+            <span>Normal</span>
+            <span>Rápido</span>
+        </div>
+    </div>
+
+    <div id="time-controls">
+        <h3>Velocidad</h3>
+        <div class="time-buttons">
+            <button id="time-slow" class="time-btn">0.25x</button>
+            <button id="time-half" class="time-btn">0.5x</button>
+            <button id="time-normal" class="time-btn">1x</button>
+            <button id="time-fast" class="time-btn">5x</button>
+            <button id="time-max" class="time-btn">10x</button>
+            <button id="time-ultra" class="time-btn">100x</button>
+        </div>
+    </div>
+
+
 
     <div id="container"></div>
 
@@ -27,6 +71,6 @@
     <script src="https://unpkg.com/three@0.149.0/build/three.min.js"></script>
 
     <\!-- Nuestro código 3D -->
-    <script src="app.js?v=22"></script>
+    <script src="app.js?v=30"></script>
 </body>
 </html>

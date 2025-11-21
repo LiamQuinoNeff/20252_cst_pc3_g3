@@ -84,41 +84,234 @@ body::before {
 }
 
 #info {
-    position: absolute;
-    top: 18px;
-    left: 18px;
-    z-index: 10;
-    background: rgba(6, 10, 32, 0.92);
-    padding: 10px 14px;
-    border-radius: 10px;
-    backdrop-filter: blur(14px);
-    box-shadow: 0 12px 38px rgba(0, 0, 0, 0.7);
-    border: 1px solid rgba(148, 163, 184, 0.6);
+  position: absolute;
+  top: 18px;
+  left: 18px;
+  z-index: 1000;
+  background: rgba(15, 23, 42, 0.92);
+  padding: 10px 16px;
+  border-radius: 12px;
+  backdrop-filter: blur(14px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(100, 116, 139, 0.4);
 }
 
 #info h2 {
-    margin-bottom: 4px;
-    font-size: 18px;
-    font-weight: 600;
-    letter-spacing: 0.06em;
+  margin-bottom: 4px;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
 }
 
 #stats {
-    display: flex;
-    gap: 10px;
-    font-size: 12px;
-    color: #e5e7eb;
+  display: flex;
+  gap: 10px;
+  font-size: 12px;
+  color: #e5e7eb;
 }
 
 #stats span {
-    opacity: 0.9;
+  opacity: 0.9;
 }
 
 #stats strong {
-    color: #a5b4fc;
-    font-size: 13px;
+  color: #a5b4fc;
+  font-size: 13px;
+}
+
+#blob-panel {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(148, 163, 184, 0.35);
+  font-size: 11px;
+  color: #e5e7eb;
+}
+
+#blob-panel h3 {
+  margin: 0 0 4px 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.9;
+}
+
+#blob-panel-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+#blob-none {
+  opacity: 0.7;
+}
+
+.blob-stat-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.blob-stat-row .label {
+  color: #9ca3af;
+}
+
+.blob-stat-row .value {
+  color: #fefce8;
 }
 
 canvas {
-    display: block;
+  display: block;
+}
+
+/* Velocity Chart Styles */
+#velocity-chart {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background: rgba(15, 23, 42, 0.92);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(100, 116, 139, 0.4);
+  border-radius: 12px;
+  padding: 16px 20px;
+  min-width: 280px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  z-index: 1000;
+}
+
+#velocity-chart h3 {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #f1f5f9;
+  text-align: center;
+  letter-spacing: 0.5px;
+}
+
+#velocity-chart-bars {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  height: 100px;
+  gap: 4px;
+  margin-bottom: 8px;
+  background: rgba(30, 41, 59, 0.5);
+  border-radius: 6px;
+  padding: 8px;
+}
+
+.chart-bar {
+  flex: 1;
+  min-width: 0;
+  background: transparent; /* color vendrá desde JS con backgroundColor */
+  border-radius: 3px 3px 0 0;
+  transition: transform 0.18s ease, filter 0.18s ease;
+  cursor: pointer;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.7);
+  border: 1px solid rgba(15, 23, 42, 0.9);
+}
+
+.chart-bar:hover {
+  transform: scaleY(1.04);
+  filter: brightness(1.25);
+}
+
+.chart-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #94a3b8;
+  padding: 0 4px;
+}
+
+.chart-labels span {
+  font-weight: 500;
+  letter-spacing: 0.3px;
+}
+
+/* Time controls card */
+#time-controls {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  z-index: 1100;
+  background: rgba(15, 23, 42, 0.92);
+  border-radius: 12px;
+  padding: 10px 14px 12px 14px;
+  border: 1px solid rgba(100, 116, 139, 0.4);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(14px);
+  min-width: 260px;
+}
+
+#time-controls h3 {
+  margin: 0 0 8px 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #e5e7eb;
+  opacity: 0.9;
+}
+
+.time-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+.time-btn {
+  flex: 1;
+  border: none;
+  outline: none;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.9);
+  color: #cbd5f5;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 500;
+  transition: all 0.15s ease;
+}
+
+.time-btn:hover {
+  filter: brightness(1.15);
+  transform: translateY(-1px);
+}
+
+.time-btn--active {
+  background: linear-gradient(135deg, #4f46e5, #22c55e);
+  color: #f9fafb;
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.6), 0 0 20px rgba(56, 189, 248, 0.55);
+}
+
+
+
+/* Curse tool (draggable kill symbol) */
+#curse-tool {
+  position: fixed;
+  top: 18px;
+  right: 24px;
+  z-index: 1200;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  background: radial-gradient(circle at 30% 20%, #fecaca, #991b1b 55%, #020617 100%);
+  border: 1px solid rgba(248, 113, 113, 0.8);
+  box-shadow: 0 0 24px rgba(248, 113, 113, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+}
+
+#curse-tool .curse-icon {
+  font-size: 20px;
+  color: #fef2f2;
+  text-shadow: 0 0 8px #fecaca;
+}
+
+#curse-tool.curse-tool--active {
+  cursor: grabbing;
+  box-shadow: 0 0 32px rgba(248, 113, 113, 1);
+  transform: scale(1.06);
 }

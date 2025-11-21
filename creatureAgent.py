@@ -18,10 +18,12 @@ class CreatureState:
 	speed: float
 	energy: float
 	foods_eaten: int = 0
+	kills: int = 0
 	size: float = 1.0
 	sense: float = 0.0
 	x: float = 0.0
 	y: float = 0.0
+	heading: float = 0.0
 
 
 class CreatureAgent(Agent):
@@ -35,52 +37,73 @@ class CreatureAgent(Agent):
 
 	class ReportBehav(PeriodicBehaviour):
 		async def run(self):
-			# Moverse (hacia target si existe, o aleatoriamente) según `speed`
+			# Moverse según estado: si ya comió al menos una vez, volver al borde y quedarse quieto
 			state = self.agent.state
-			# movimiento aleatorio: dirección uniforme
-			# Si tiene un objetivo, moverse hacia él; si no, moverse aleatoriamente
-			target = getattr(self.agent, "target", None)
-			if target is not None:
-				# vector hacia target
-				dx = target[0] - state.x
-				dy = target[1] - state.y
+			drain = 0.0
+			seeking = False
+			movement_unlocked = getattr(self.agent, "movement_unlocked", False)
+			# Si la criatura ya ha comido al menos un alimento, se considera satisfecha
+			if state.foods_eaten >= 1:
+				# mover suavemente hacia su posición inicial (borde) y luego quedar quieto
+				hx = getattr(self.agent, "home_x", state.x)
+				hy = getattr(self.agent, "home_y", state.y)
+				dx = hx - state.x
+				dy = hy - state.y
 				dist = math.hypot(dx, dy)
-				if dist > 0:
+				if dist > 0.1:
 					step = min(state.speed, dist)
 					state.x += (dx / dist) * step
 					state.y += (dy / dist) * step
-					seeking = True
 				else:
-					seeking = False
+					state.x = hx
+					state.y = hy
+				# no reducir energía cuando ya está satisfecha
 			else:
-				seeking = False
-				# movimiento aleatorio: dirección uniforme
-				theta = random.random() * 2 * math.pi
-				dx = math.cos(theta) * state.speed
-				dy = math.sin(theta) * state.speed
-				state.x += dx
-				state.y += dy
+				if movement_unlocked:
+					# movimiento aleatorio: dirección uniforme en el plano
+					heading = getattr(state, "heading", None)
+					if heading is None or not isinstance(heading, (int, float)):
+						heading = random.random() * 2 * math.pi
+					# variación algo mayor para trayectorias más serpenteantes
+					turn = random.uniform(-1.0, 1.0)
+					heading += turn
+					# normalizar a [0, 2π) para evitar overflow numérico a largo plazo
+					heading = heading % (2 * math.pi)
+					state.heading = heading
+					# paso ligeramente aleatorio alrededor de la velocidad
+					step_factor = random.uniform(1.0, 1.4)
+					step = state.speed * step_factor
+					dx = math.cos(heading) * step
+					dy = math.sin(heading) * step
+					state.x += dx
+					state.y += dy
+					# reducir energía según la fórmula: energy_scale*(size^3*speed^2) + sense_scale*sense
+					config = getattr(self.agent, "config", None)
+					if config is not None:
+						energy_scale = getattr(config, "energy_scale", 0.02)
+						sense_scale = getattr(config, "sense_scale", 0.02)
+					else:
+						energy_scale = 0.02
+						sense_scale = 0.02
+					drain = energy_scale * (state.size ** 3 * (state.speed ** 2)) + sense_scale * state.sense
 			# Limitar posición dentro del espacio si está disponible
 			space = getattr(self.agent, "space_size", None)
 			if space is not None:
 				w, h = space
-				# clamp
+				# clamp y detectar si golpeó el borde para reorientar
+				before_x, before_y = state.x, state.y
 				state.x = max(0.0, min(w, state.x))
 				state.y = max(0.0, min(h, state.y))
-			# reducir energía según la fórmula: energy_scale*(size^3*speed^2) + sense_scale*sense
-			config = getattr(self.agent, "config", None)
-			if config is not None:
-				energy_scale = getattr(config, "energy_scale", 0.02)
-				sense_scale = getattr(config, "sense_scale", 0.02)
-			else:
-				energy_scale = 0.02
-				sense_scale = 0.02
-			drain = energy_scale * (state.size ** 3 * (state.speed ** 2)) + sense_scale * state.sense
-			# if seeking, slightly increase drain using seek multiplier
-			if seeking:
-				mult = getattr(config, "seek_energy_multiplier", 1.3) if config is not None else 1.3
-				drain *= mult
-			state.energy -= drain
+				if state.x != before_x or state.y != before_y:
+					# al tocar borde, mirar hacia el interior de la plataforma (aprox. hacia el centro)
+					cx, cy = w / 2.0, h / 2.0
+					angle_to_center = math.atan2(cy - state.y, cx - state.x)
+					# pequeño jitter para mantener movimiento orgánico
+					jitter = random.uniform(-math.pi / 4.0, math.pi / 4.0)
+					state.heading = angle_to_center + jitter
+			# aplicar drenaje de energía solo si corresponde
+			if drain > 0.0:
+				state.energy -= drain
 
 			# Construir y enviar mensaje JSON con el estado actual
 			payload = {
@@ -89,9 +112,11 @@ class CreatureAgent(Agent):
 				"x": state.x,
 				"y": state.y,
 				"energy": state.energy,
+				"speed": state.speed,
 				"size": state.size,
 				"sense": state.sense,
 				"foods_eaten": state.foods_eaten,
+				"kills": getattr(state, "kills", 0),
 			}
 			msg = Message(to=self.agent.generation_jid)
 			msg.set_metadata("performative", "inform")
@@ -143,8 +168,9 @@ class CreatureAgent(Agent):
 			except Exception:
 				return
 
+			mtype = data.get("type")
 			# Manejar confirmación de comida recibida
-			if data.get("type") == "eat_confirm" and data.get("jid") == self.agent.state.jid:
+			if mtype == "eat_confirm" and data.get("jid") == self.agent.state.jid:
 				# incrementar contador de comidas y aumentar la energía según `energy_gain`
 				self.agent.state.foods_eaten += 1
 				energy_gain = None
@@ -158,8 +184,14 @@ class CreatureAgent(Agent):
 					fes = getattr(cfg, "food_energy_scale", 0.8) if cfg is not None else 0.8
 					energy_gain = fes * (self.agent.state.size ** 3)
 				self.agent.state.energy += energy_gain
+				# si venía información de presa, contar como un asesinato (kill)
+				if "prey" in data:
+					self.agent.state.kills = getattr(self.agent.state, "kills", 0) + 1
 				# enviar ack opcional
-			elif data.get("type") == "generation_end":
+			elif mtype == "start_movement":
+				# desbloquear el movimiento al inicio de la generación cuando GenerationAgent lo indique
+				setattr(self.agent, "movement_unlocked", True)
+			elif mtype == "generation_end":
 				# La generación terminó: enviar estado final (`finished`) y detener
 				end_msg = Message(to=self.agent.generation_jid)
 				end_msg.set_metadata("performative", "inform")
@@ -209,13 +241,16 @@ class CreatureAgent(Agent):
 		# posición inicial si fue provista
 		self.state.x = getattr(self, "init_x", self.state.x)
 		self.state.y = getattr(self, "init_y", self.state.y)
-
+		# recordar la posición inicial (borde) como "home" para cuando esté satisfecha
+		self.home_x = self.state.x
+		self.home_y = self.state.y
+		# permitir movimiento desde el inicio (el bloqueo se gestiona visualmente en el frontend)
+		self.movement_unlocked = True
 		print(f"Creature {jid} started — speed={self.state.speed:.2f} energy={self.state.energy:.2f} size={self.state.size:.2f} sense={self.state.sense:.2f}")
 		try:
 			logger.info(f"Creature {jid} started speed={self.state.speed:.2f} energy={self.state.energy:.2f} size={self.state.size:.2f} sense={self.state.sense:.2f}")
 		except Exception:
 			pass
-
 		# Reportar periódicamente (usar periodo del world config si existe, añadir jitter)
 		period = 1.0
 		config = getattr(self, "config", None)
@@ -229,4 +264,3 @@ class CreatureAgent(Agent):
 
 if __name__ == "__main__":
 	print("Este archivo define `CreatureAgent`. Ejecutarlo a través de `hostAgent` o `generationAgent`.")
-

@@ -81,28 +81,19 @@ class GenerationAgent(Agent):
 
         to_spawn = []
         if spawn_list is None:
-            # crear individuos: para la generación 1 todos deben tener los mismos atributos
+            # crear individuos: para la generación 1 todas las velocidades son aleatorias
             if self.generation == 1:
-                # usar valores provistos en config si existen, sino elegir un speed aleatorio único
-                base_speed = getattr(self.config, "initial_speed", None)
-                if base_speed is None:
-                    base_speed = utils.random_speed()
-                base_energy = getattr(self.config, "initial_energy", None)
-                if base_energy is None:
-                    base_energy = utils.default_energy_for_speed(base_speed)
-                base_size = getattr(self.config, "initial_size", None)
-                if base_size is None:
-                    base_size = utils.random_size()
-                base_sense = getattr(self.config, "initial_sense", None)
-                if base_sense is None:
-                    base_sense = utils.random_sense()
-                for i in range(self.num_initial):
-                    to_spawn.append((base_speed, base_energy, base_size, base_sense))
-            else:
-                # generaciones posteriores: individuos con velocidad/energía aleatoria (energía inversa a velocidad)
+                base_size = getattr(self.config, "initial_size", 1.0)
+                base_sense = getattr(self.config, "initial_sense", 1.0)
                 for i in range(self.num_initial):
                     speed = utils.random_speed()
-                    energy = utils.default_energy_for_speed(speed)
+                    energy = utils.speed_to_energy(speed)
+                    to_spawn.append((speed, energy, base_size, base_sense))
+            else:
+                # generaciones posteriores sin spawn_list explícito (fallback): velocidades aleatorias balanceadas
+                for i in range(self.num_initial):
+                    speed = utils.random_speed()
+                    energy = utils.speed_to_energy(speed)
                     size = utils.random_size()
                     sense = utils.random_sense()
                     to_spawn.append((speed, energy, size, sense))
@@ -143,8 +134,10 @@ class GenerationAgent(Agent):
             agent.generation_jid = str(self.jid).split("/")[0]
             w, h = self.space_size
             agent.space_size = self.space_size
-            agent.init_x = random.uniform(0, w)
-            agent.init_y = random.uniform(0, h)
+            # Spawn at edge of platform
+            edge_pos = utils.spawn_position_on_edge(self.space_size)
+            agent.init_x = edge_pos[0]
+            agent.init_y = edge_pos[1]
             agent.config = self.config
             self.spawned_map[jid] = agent
             self.creatures_info[jid_base] = {"jid_full": jid, "foods_eaten": 0, "alive": True, "speed": speed, "energy": energy, "size": size, "sense": sense, "x": agent.init_x, "y": agent.init_y}
@@ -163,6 +156,16 @@ class GenerationAgent(Agent):
                 pass
         
         await asyncio.gather(*[start_agent(info) for info in agents_to_start])
+
+        # una vez arrancados todos los agentes de la generación, desbloquear su movimiento a la vez
+        try:
+            for agent, jid, speed, energy, size, sense in agents_to_start:
+                m = Message(to=jid)
+                m.set_metadata("performative", "inform")
+                m.body = json.dumps({"type": "start_movement"})
+                await self.send(m)
+        except Exception:
+            pass
 
     class RecvBehav(CyclicBehaviour):
         async def run(self):
@@ -196,7 +199,16 @@ class GenerationAgent(Agent):
                     base = sender.split("@")[0]
                     info = self.agent.creatures_info.get(base)
                     if info is not None:
-                        info["foods_eaten"] += 1
+                        prev_foods = info.get("foods_eaten", 0)
+                        info["foods_eaten"] = prev_foods + 1
+                        # si acaba de comer por primera vez, dejar de considerarlo activo (ya no cuenta como "hambriento en movimiento")
+                        if prev_foods == 0:
+                            try:
+                                jid_full = str(msg.sender).split("/")[0]
+                                if jid_full in self.agent.active_creature_jids:
+                                    self.agent.active_creature_jids.remove(jid_full)
+                            except Exception:
+                                pass
                     # confirmar al creature
                     reply = Message(to=str(msg.sender).split("/")[0])
                     reply.set_metadata("performative", "inform")
@@ -355,6 +367,45 @@ class GenerationAgent(Agent):
                 else:
                     target_msg.body = json.dumps({"type": "no_target"})
                 await self.send(target_msg)
+            elif mtype == "kill":
+                target_jid = data.get("target_jid")
+                if not target_jid:
+                    return
+
+                base = target_jid.split("@")[0]
+                info = self.agent.creatures_info.get(base)
+                if info is not None:
+                    info["alive"] = False
+                    info["foods_eaten"] = 0
+                    info["energy"] = 0
+
+                if target_jid in self.agent.active_creature_jids:
+                    try:
+                        self.agent.active_creature_jids.remove(target_jid)
+                    except Exception:
+                        pass
+
+                prey_agent = self.agent.spawned_map.get(target_jid)
+                if prey_agent is not None:
+                    try:
+                        await prey_agent.stop()
+                    except Exception:
+                        pass
+                    try:
+                        self.agent.spawned_map.pop(target_jid, None)
+                    except Exception:
+                        pass
+
+                try:
+                    host_j = getattr(self.agent, "host_jid", None)
+                    if host_j:
+                        rem = Message(to=host_j)
+                        rem.set_metadata("performative", "inform")
+                        rem.body = json.dumps({"type": "creature_removed", "jid": target_jid, "reason": "killed", "killed_by": "curse"})
+                        await self.send(rem)
+                except Exception:
+                    pass
+
             elif mtype == "finished":
                 # Marca criatura como finalizada
                 base = sender.split("@")[0]
@@ -399,22 +450,34 @@ class GenerationAgent(Agent):
 
     class MonitorBehav(PeriodicBehaviour):
         async def run(self):
-            # Si no quedan creatures activos -> finalizar generación
-            if len(self.agent.active_creature_jids) == 0:
+            # Si ya estamos terminando esta generación, no hacer nada
+            if getattr(self.agent, "_ending", False):
+                return
+
+            # Considerar criaturas hambrientas: vivas, con energía>0 y foods_eaten == 0
+            hungry_bases = []
+            for base, info in list(self.agent.creatures_info.items()):
+                if not info.get("alive", True):
+                    continue
+                foods = info.get("foods_eaten", 0)
+                energy = info.get("energy", 0)
+                if foods == 0 and energy > 0:
+                    hungry_bases.append(base)
+
+            # Loguear cuántos individuos siguen hambrientos en esta generación
+            try:
+                logger.info(f"Monitor: gen={self.agent.generation} hungry={len(hungry_bases)} bases={hungry_bases}")
+            except Exception:
+                pass
+
+            if not hungry_bases:
                 await self.agent._end_generation()
                 return
 
             # Si no queda comida y no se ha comido nada en los últimos `last_eat_grace` -> terminar generación
-            if len(self.agent.foods) == 0 and (time.time() - self.agent.last_eat_time) > getattr(self.agent.config, "last_eat_grace", 3.0):
-                # instruir a las criaturas activas a terminar
-                for jid in list(self.agent.active_creature_jids):
-                    msg = Message(to=jid)
-                    msg.set_metadata("performative", "inform")
-                    msg.body = json.dumps({"type": "generation_end"})
-                    await self.send(msg)
-                # esperar un momento y luego forzar el end
-                await asyncio.sleep(1)
-                await self.agent._end_generation()
+            # (desactivado: ahora la generación termina solo cuando no queden creatures activos)
+            if False and len(self.agent.foods) == 0 and (time.time() - self.agent.last_eat_time) > getattr(self.agent.config, "last_eat_grace", 3.0):
+                pass
 
     async def _end_generation(self):
         if self._ending:
@@ -436,34 +499,16 @@ class GenerationAgent(Agent):
         # esperar un breve periodo para recolectar mensajes 'finished'
         await asyncio.sleep(1.5)
 
-        # Forzar parada de los agentes que siguen activos
+        # Forzar parada de todos los agentes de la generación actual
         if hasattr(self, "spawned_agents") and self.spawned_agents:
             for ag in list(self.spawned_agents):
                 try:
-                    if str(ag.jid).split("/")[0] in self.active_creature_jids:
-                        await ag.stop()
+                    await ag.stop()
                 except Exception:
                     pass
             self.spawned_agents = []
 
         # Notify host UI that remaining active creatures are being removed (generation end)
-        try:
-            host_j = getattr(self, "host_jid", None)
-            if host_j:
-                for jid_full in list(self.active_creature_jids):
-                    try:
-                        rem = Message(to=host_j)
-                        rem.set_metadata("performative", "inform")
-                        rem.body = json.dumps({"type": "creature_removed", "jid": jid_full, "reason": "generation_end"})
-                        await self.send(rem)
-                    except Exception:
-                        pass
-        except Exception:
-            pass
-
-        # asegurar que active_creature_jids está vacio
-        self.active_creature_jids = set()
-
         # calcular estadísticas y nueva lista de specs para siguiente generación
         next_specs = []
         survivors = 0
@@ -481,40 +526,49 @@ class GenerationAgent(Agent):
             speed_parent = info.get("speed", utils.random_speed())
             size_parent = info.get("size", utils.random_size())
             sense_parent = info.get("sense", utils.random_sense())
-            # Reset parent energy for next generation to the default for their speed
-            default_energy = utils.default_energy_for_speed(speed_parent)
-            energy_parent = default_energy
+
             speeds.append(speed_parent)
             foods_list.append(foods)
             sizes.append(size_parent)
             senses.append(sense_parent)
+
             # if the creature was killed by predation or otherwise marked not alive, count as death
             if not info.get("alive", True):
                 deaths += 1
                 continue
+
             if foods == 0:
+                # No food = death
                 deaths += 1
                 continue
-            elif foods == 1:
-                # parent survives, keep same speed and remaining energy
-                # keep speed, size and sense; reset energy to default
-                next_specs.append({"speed": speed_parent, "energy": energy_parent, "size": size_parent, "sense": sense_parent})
-                survivors_bases.append(base)
-                survivors += 1
-            else:
-                # parent survives AND produces one child
-                # parent keeps same speed/size/sense and resets energy
-                next_specs.append({"speed": speed_parent, "energy": energy_parent, "size": size_parent, "sense": sense_parent})
-                survivors_bases.append(base)
-                # child with random speed and energy (inverse relation)
-                child_speed = utils.random_speed()
-                child_energy = utils.default_energy_for_speed(child_speed)
-                child_size = utils.random_size()
-                child_sense = utils.random_sense()
-                next_specs.append({"speed": child_speed, "energy": child_energy, "size": child_size, "sense": child_sense})
-                reproducers_bases.append(base)
-                survivors += 1
-                reproducers += 1
+
+            # Ate at least 1 food: este individuo genera descendencia
+            # Size growth: bigger blobs para la nueva generación según comida
+            growth_factor = 1.0 + 0.05 * min(max(foods, 1), 5)
+            new_size = size_parent * growth_factor
+
+            # cap de tamaño razonable
+            if new_size > 2.0:
+                new_size = 2.5
+
+            # contar como superviviente y reproductor
+            survivors_bases.append(base)
+            survivors += 1
+            reproducers_bases.append(base)
+            reproducers += 1
+
+            # Generar DOS hijos para la siguiente generación, ambos con velocidad ligeramente mutada
+            for _ in range(2):
+                child_speed = utils.mutate_speed(speed_parent)
+                child_energy = utils.speed_to_energy(child_speed)
+                child_size = new_size
+                child_sense = sense_parent
+                next_specs.append({
+                    "speed": child_speed,
+                    "energy": child_energy,
+                    "size": child_size,
+                    "sense": child_sense,
+                })
 
         avg_speed = sum(speeds) / len(speeds) if speeds else 0
         avg_foods = sum(foods_list) / len(foods_list) if foods_list else 0
