@@ -118,9 +118,38 @@ class HostAgent(Agent):
                 removals = list(self.removals) if hasattr(self, 'removals') else []
             except Exception:
                 removals = []
-            return aiohttp.web.json_response({"fishes": fishes, "foods": foods, "space_size": self.gen.space_size if hasattr(self, "gen") else (30, 30), "removals": removals})
+            # obtener número de generación actual
+            generation = 0
+            try:
+                generation = self.gen.generation if hasattr(self, "gen") else 0
+            except Exception:
+                generation = 0
+            return aiohttp.web.json_response({"fishes": fishes, "foods": foods, "space_size": self.gen.space_size if hasattr(self, "gen") else (30, 30), "removals": removals, "generation": generation})
+
+        async def set_speed(request):
+            try:
+                data = await request.json()
+                speed = float(data.get('speed', 1.0))
+                # Limitar velocidad entre 0.25 y 2.0
+                speed = max(0.25, min(2.0, speed))
+                
+                # Actualizar el periodo de reporte de las criaturas
+                if hasattr(self, 'gen') and hasattr(self.gen, 'spawned_agents'):
+                    for creature in self.gen.spawned_agents:
+                        if hasattr(creature, 'state'):
+                            # Ajustar el periodo del behaviour de reporte
+                            report_behav = creature.behaviours[0] if creature.behaviours else None
+                            if report_behav and hasattr(report_behav, 'period'):
+                                # Periodo inverso a la velocidad (más rápido = menor periodo)
+                                base_period = 1.0
+                                report_behav.period = base_period / speed
+                
+                return aiohttp.web.json_response({"success": True, "speed": speed})
+            except Exception as e:
+                return aiohttp.web.json_response({"success": False, "error": str(e)}, status=400)
 
         app.router.add_get('/fishes', fishes_controller)
+        app.router.add_post('/set_speed', set_speed)
         # servir archivos estáticos
         if os.path.isdir(static_folder):
             app.router.add_static('/static/', path=static_folder, name='static')
@@ -162,6 +191,19 @@ class HostAgent(Agent):
 
 
 async def main():
+    # Limpiar archivos CSV del directorio report
+    report_dir = os.path.join(os.path.dirname(__file__), "report")
+    if os.path.exists(report_dir):
+        csv_files = ["generation_summary.csv", "generation_details.csv", "predation_events.csv"]
+        for csv_file in csv_files:
+            file_path = os.path.join(report_dir, csv_file)
+            if os.path.exists(file_path):
+                try:
+                    os.remove(file_path)
+                    print(f"Cleaned: {csv_file}")
+                except Exception as e:
+                    print(f"Warning: Could not clean {csv_file}: {e}")
+    
     host = HostAgent('host@localhost', '123456abcd.')
     await host.start()
     print("Host agent started")

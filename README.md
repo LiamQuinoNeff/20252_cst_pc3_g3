@@ -1,19 +1,78 @@
-# Simulación SPADE: Selección Natural (Proyecto)
+# Simulación SPADE: Selección Natural con Comportamientos Emergentes
 
 ------------------------------------------------------------------------------------------------------------------------------------------------
 Introducción
 ------------------------------------------------------------------------------------------------------------------------------------------------
 
-Este proyecto implementa una simulación de selección natural utilizando agentes autónomos construidos con SPADE.
-El sistema recrea un ecosistema básico donde múltiples criaturas operan de manera independiente, consumiendo energía, moviéndose dentro de un entorno discreto, buscando comida, interactuando entre sí y pudiendo morir por depredación o agotamiento energético.
+Este proyecto implementa una simulación de selección natural y comportamientos emergentes utilizando agentes autónomos construidos con SPADE (Smart Python Agent Development Environment).
 
-La ejecución completa incluye
-	1.	Creación de agentes y del entorno.
-	2.	Ciclo de vida de cada generación.
-	3.	Visualización en tiempo real mediante interfaz web.
-	4.	Registro detallado de eventos, depredación y resultados.
+El sistema recrea un ecosistema donde múltiples criaturas operan de manera independiente con comportamientos complejos que incluyen:
+- **Satisfacción basada en objetivos**: Las criaturas buscan alimento hasta alcanzar un objetivo de comida consumida
+- **Modo supervivencia**: Cuando la energía cae por debajo del 35%, las criaturas reducen su objetivo de 2 a 1 alimento
+- **Retorno al hogar**: Una vez satisfechas, las criaturas regresan a su punto de spawn sin gastar energía
+- **Movimiento sincronizado**: Todas las criaturas inician su movimiento simultáneamente después de spawnearse
+- **Distribución equidistante**: Las criaturas nacen distribuidas uniformemente en el perímetro del mundo
+
+La ejecución completa incluye:
+1. Creación de agentes y del entorno
+2. Ciclo de vida de cada generación con métricas de supervivencia
+3. Visualización 3D en tiempo real mediante interfaz web con Three.js
+4. Control de velocidad de simulación (0.25x - 2.0x)
+5. Registro detallado de eventos y resultados en CSV
 
 La arquitectura se basa en comunicación asincrónica entre agentes utilizando XMPP y mensajes periódicos de estado, donde HostAgent actúa como punto de observación y sincronización para la UI.
+
+------------------------------------------------------------------------------------------------------------------------------------------------
+Conceptos teóricos aplicados
+------------------------------------------------------------------------------------------------------------------------------------------------
+
+### 1. **Sistemas Multi-Agente (MAS)**
+El proyecto implementa un Sistema Multi-Agente donde cada entidad (criatura, generación, host) opera como un agente autónomo con:
+- **Autonomía**: Cada agente toma decisiones independientes sin control centralizado
+- **Comunicación asincrónica**: Intercambio de mensajes mediante protocolo XMPP
+- **Proactividad**: Los agentes persiguen objetivos (buscar comida, sobrevivir, reproducirse)
+- **Reactividad**: Responden a cambios en el entorno (energía baja, comida cercana)
+
+### 2. **Comportamiento Emergente**
+El sistema exhibe comportamientos emergentes que surgen de reglas simples:
+- **Modo supervivencia**: Las criaturas adaptan su estrategia cuando la energía es crítica
+- **Optimización de recursos**: Las criaturas satisfechas retornan al hogar sin gastar energía
+- **Convergencia espacial**: La distribución perimetral crea patrones de movimiento radiales
+
+### 3. **Selección Natural Simulada**
+Implementa principios evolutivos básicos:
+- **Fitness variable**: Las criaturas con mejor gestión energética sobreviven más tiempo
+- **Reproducción selectiva**: Solo las criaturas que alcanzan satisfacción (2 alimentos) se reproducen
+- **Presión ambiental**: La escasez de recursos fuerza decisiones estratégicas
+- **Supervivencia diferencial**: El modo supervivencia permite adaptación bajo estrés
+
+### 4. **Arquitectura Basada en Mensajes**
+Patrón de comunicación asincrónica:
+- **Publisher-Subscriber**: Las criaturas publican estados, el host los consume
+- **Event-Driven**: La lógica reacciona a eventos (comida consumida, energía crítica, satisfacción)
+- **Temporal consistency**: Sistema de timestamps previene inconsistencias por mensajes tardíos
+
+### 5. **Máquinas de Estado Finito (FSM)**
+Cada criatura implementa estados bien definidos:
+```
+FORAGING → [comida >= objetivo] → SATISFIED → RETURNING_HOME → FINISHED
+    ↓
+[energía ≤ 35%] → SURVIVAL_MODE → [comida >= 1] → SATISFIED
+    ↓
+[energía ≤ 0] → EXHAUSTED → FINISHED
+```
+
+### 6. **Sincronización Distribuida**
+Mecanismos para coordinar agentes sin control centralizado:
+- **Barrier synchronization**: Señal `start_moving` sincroniza inicio de movimiento
+- **Flag-based coordination**: `can_move` previene movimiento prematuro
+- **Spawn sequence**: Creación secuencial con confirmación de inicio
+
+### 7. **Optimización Espacial**
+Algoritmos geométricos para distribución y navegación:
+- **Perimeter distribution**: Cálculo de posiciones equidistantes en rectángulo
+- **Euclidean distance**: Detección de comida y retorno al spawn
+- **Homing behavior**: Navegación sin costo energético hacia punto de origen
 
 ------------------------------------------------------------------------------------------------------------------------------------------------
 Agentes del sistema
@@ -21,37 +80,58 @@ Agentes del sistema
 
 `HostAgent`
 Es el agente encargado de:
-- Servir la interfaz web.
-- Exponer el estado global del mundo mediante la ruta /fishes.
-- Mantener un diccionario actualizado de criaturas activas.
-- Recibir mensajes de estados enviados por cada criatura.
-- Registrar eliminaciones mediante la lista de removals, utilizada para efectos visuales.
-- Manejar la ventana de protección contra reintroducción de criaturas eliminadas recientemente.
-- Iniciar la simulación y lanzar el GenerationAgent.
+- Servir la interfaz web mediante servidor HTTP (aiohttp) en puerto 10000
+- Exponer el estado global del mundo mediante endpoint `/fishes`
+- Mantener un diccionario actualizado de criaturas activas con sus estados
+- Recibir mensajes de estados enviados por cada criatura (CyclicBehaviour)
+- Registrar eliminaciones mediante la lista de `removals`, utilizada para efectos visuales
+- Manejar la ventana de protección contra reintroducción (3 segundos)
+- Iniciar la simulación y lanzar el GenerationAgent
+- Gestionar control de velocidad mediante endpoint `/set_speed` (0.25x - 2.0x)
+- Limpiar archivos CSV al inicio de cada ejecución
 
 Es el agente más cercano a la interfaz e integra la parte visual con la parte lógica.
 
 `GenerationAgent`
 Coordina la simulación como un controlador central. Sus funciones principales son:
-- Inicializar cada generación y colocar comida en el mapa.
-- Crear una cantidad configurable de criaturas (cada una ejecutándose como un agente independiente).
-- Supervisar depredación, muerte, agotamiento energético y demás eventos.
-- Recolectar información relevante para generar métricas de la generación.
-- Determinar cuándo finaliza la generación y preparar los archivos CSV.
-- Enviar mensajes al HostAgent para actualizar la interfaz.
-- Gestionar el tiempo de vida de las criaturas y condiciones de término.
+- Inicializar cada generación con distribución perimetral equidistante de criaturas
+- Colocar comida aleatoriamente en el mapa (cantidad configurable)
+- Enviar señal de sincronización `start_moving` después del spawn completo
+- Supervisar depredación, muerte, agotamiento energético y satisfacción
+- Procesar mensajes de criaturas (comida consumida, finalización)
+- Recolectar información para métricas generacionales (CSV)
+- Determinar finalización cuando `active_creature_jids` está vacío
+- Generar reportes: `generation_summary.csv`, `generation_details.csv`, `predation_events.csv`
+- Gestionar herencia genética para siguiente generación
 
-Este agente actúa como supervisor y recolector de estadística.
+**Comportamientos (SPADE Behaviours):**
+- `RecvBehav` (CyclicBehaviour): Recibe eventos de criaturas (ate_food, finished, status)
+- `MonitorBehav` (PeriodicBehaviour): Supervisa condiciones de término de generación
+
+Este agente actúa como supervisor, recolector de estadísticas y motor evolutivo.
 
 `CreatureAgent`
-Cada CreatureAgent se comporta como una entidad autónoma. Su ciclo de vida incluye:
-- Movimiento dentro de la cuadrícula basada en reglas simples o heurísticas.
-- Consumo constante de energía.
-- Detección y consumo de comida si se encuentra en posiciones cercanas.
-- Reporte periódico de estado a HostAgent y GenerationAgent.
-- Finalización del ciclo al morir, agotarse o ser depredado.
+Cada CreatureAgent se comporta como una entidad autónoma con comportamientos complejos:
 
-La criatura no tiene información global del mapa, solo sus percepciones y los datos proporcionados por GenerationAgent.
+**Estados del ciclo de vida:**
+- **Foraging**: Búsqueda activa de alimento con consumo de energía
+- **Survival Mode**: Activado cuando energía ≤ 35%, reduce objetivo de 2 a 1 alimento
+- **Satisfied**: Alcanzado el objetivo de comida, inicia retorno al spawn
+- **Returning Home**: Navegación sin costo energético hacia punto de origen
+- **Finished**: Terminación por satisfacción o agotamiento energético
+
+**Características del agente:**
+- Movimiento dentro de la cuadrícula con consumo energético proporcional
+- Detección y consumo de comida en radio de percepción (`sense`)
+- Sistema de satisfacción con objetivos variables (2 → 1 en modo supervivencia)
+- Reporte periódico de estado a HostAgent y GenerationAgent
+- Variables heredables: velocidad (`speed`), tamaño (`size`), percepción (`sense`)
+
+**Comportamientos (SPADE Behaviours):**
+- `ReportBehav` (PeriodicBehaviour): Gestiona movimiento, energía y lógica de estados
+- `RecvBehav` (CyclicBehaviour): Recibe señales de inicio y terminación
+
+La criatura opera con información local (percepción limitada), sin conocimiento global del mapa.
 
 ------------------------------------------------------------------------------------------------------------------------------------------------
 Arquitectura del proyecto
@@ -72,7 +152,15 @@ Implementación del comportamiento individual de las criaturas: movimiento, ener
 Define WorldConfig con parámetros como dimensiones, energía inicial, cantidad de comida, duración de generación, velocidad de reporte, tasas de depredación, etc.
 
 `utils.py`
-Funciones auxiliares como cálculos de distancia, generación de pellets, posiciones válidas y soporte general para cálculos del mapa.
+Funciones auxiliares:
+- `dist()`: Cálculo de distancia euclidiana
+- `random_pos()`: Generación de posiciones aleatorias válidas
+- `generate_pellets()`: Creación de pellets de comida
+- `spawn_positions_on_perimeter()`: Distribución equidistante en perímetro rectangular
+  - Calcula perímetro total: `2 * (width + height)`
+  - Divide en segmentos iguales según cantidad de criaturas
+  - Recorre bordes: top → right → bottom → left
+  - Garantiza fairness espacial en condiciones iniciales
 
 `logger_setup.py`
 Configuración del logger unificado. Guarda los logs en `report/run.log` con rotación (hasta 3 archivos de respaldo).
@@ -85,39 +173,140 @@ Contiene los resultados generados automáticamente:
 - `run.log` (log principal; además puede haber archivos rotados como `run.log.1`, `run.log.2`, ...)
 
 `static/`
-Archivos de la interfaz web. Actualmente la UI soporta una visualización 3D (implementada con Three.js) y los controles/render se encuentran en `index.html` y `app.js`.
-- `index.html`: archivo principal de visualización (interfaz 3D usando Three.js).
-- `app.js`: código de la interfaz; además de hacer polling a `/fishes`, contiene la lógica de render 3D (Three.js) y los controles de cámara.
-- `style.css`: estilos para la interfaz.
+Archivos de la interfaz web con visualización 3D:
+- `index.html`: Interfaz principal con Three.js (r149), incluye:
+  - Botones de control de velocidad (0.25x, 0.5x, 1.0x, 1.5x, 2.0x)
+  - Display de número de generación
+  - Canvas para renderizado 3D
+- `app.js`: Lógica de visualización:
+  - Polling a `/fishes` cada 250ms
+  - Renderizado 3D con Three.js (criaturas como esferas, comida como cubos)
+  - Sistema de colores por estado:
+    - Gris: 0 alimentos consumidos
+    - Azul: 1 alimento consumido
+    - Verde: 2 alimentos (satisfecha, retornando)
+  - Efectos visuales de eliminación (flash rojo)
+  - Control de velocidad mediante POST a `/set_speed`
+- `style.css`: Estilos para UI y botones de control
 
 ------------------------------------------------------------------------------------------------------------------------------------------------
 Funcionamiento interno de la interfaz web
 ------------------------------------------------------------------------------------------------------------------------------------------------
 
-La interfaz funciona mediante una consulta repetitiva al endpoint /fishes.
-Cada 250 ms, el archivo app.js realiza las siguientes acciones:
-1.	Solicita el estado global al servidor HostAgent.
-2.	Traduce las criaturas en elementos visuales:
-	-	Color gris si no ha comido.
-	-	Color azul si ha comido una vez.
-	-	Color rojo si está lista para reproducirse.
-3.	Dibuja comidas y elementos del mapa.
-4.	Dibuja un flash en posiciones donde una criatura ha sido eliminada recientemente.
-5.	Ajusta automáticamente escalas del mundo según los valores de WorldConfig.
+La interfaz funciona mediante polling al endpoint `/fishes` cada 250ms.
 
-El canvas se redibuja completamente en cada ciclo para mostrar cambios en tiempo real.
+**Ciclo de actualización (app.js):**
+1. Solicita el estado global al servidor HostAgent
+2. Recibe datos JSON con:
+   - `generation`: Número de generación actual
+   - `creatures`: Array de criaturas activas con posición, energía, comida, atributos
+   - `foods`: Array de posiciones de comida disponible
+   - `removals`: Array de criaturas eliminadas recientemente
+   - `space_size`: Dimensiones del mundo
+
+3. **Renderizado 3D con Three.js:**
+   - Criaturas: Esferas coloreadas por estado
+     - Gris: 0 alimentos (`foods_eaten === 0`)
+     - Azul: 1 alimento (`foods_eaten === 1`)
+     - Verde: Satisfecha, retornando (`foods_eaten >= 2`)
+   - Comida: Cubos amarillos en posiciones disponibles
+   - Eliminaciones: Flash rojo temporal en última posición conocida
+   - Grid: Plano de referencia con líneas de cuadrícula
+
+4. **Controles de velocidad:**
+   - Botones modifican el periodo de `ReportBehav` en todas las criaturas
+   - 0.25x = 2.0s periodo (slow motion)
+   - 0.5x = 1.0s periodo
+   - 1.0x = 0.5s periodo (normal)
+   - 1.5x = 0.33s periodo
+   - 2.0x = 0.25s periodo (fast forward)
+   - POST a `/set_speed` actualiza dinámicamente sin reiniciar simulación
+
+5. **OrbitControls:** Permite rotación, zoom y paneo de la cámara 3D
+
+El canvas se redibuja completamente en cada ciclo para reflejar cambios en tiempo real.
 
 ------------------------------------------------------------------------------------------------------------------------------------------------
 Modelo de comunicación
 ------------------------------------------------------------------------------------------------------------------------------------------------
 
-Los agentes SPADE se comunican por mensajes XMPP.
-Cada CreatureAgent envía periódicamente mensajes de estado al HostAgent, tales como:
-- status
-- creature_removed
-- finished
+Los agentes SPADE se comunican mediante mensajes XMPP con arquitectura asincrónica.
 
-El HostAgent no solo los recibe sino que también los ordena temporalmente, evitando inconsistencias debidas a mensajes tardíos.
+**Tipos de mensajes:**
+
+1. **status** (Creature → Host, Creature → Generation)
+   - Enviado periódicamente por `ReportBehav`
+   - Contenido: `jid`, `x`, `y`, `energy`, `size`, `sense`, `foods_eaten`
+   - Usado para actualización de UI y monitoreo de estados
+
+2. **ate_food** (Creature → Generation)
+   - Enviado cuando criatura consume comida
+   - Contenido: `food_pos` (coordenadas)
+   - Genera registro en `predation_events.csv` si aplica
+
+3. **finished** (Creature → Generation, Creature → Host)
+   - Enviado al terminar ciclo de vida
+   - Contenido: `foods_eaten`, `energy`, `size`, `sense`, `satisfied` (opcional)
+   - `satisfied=True`: Criatura alcanzó objetivo y retornó al spawn
+   - `satisfied` ausente: Criatura agotó energía
+
+4. **start_moving** (Generation → Creature)
+   - Enviado después de spawn completo (barrier synchronization)
+   - Activa flag `can_move` en criaturas
+   - Garantiza inicio sincronizado de movimiento
+
+5. **end_now** (Generation → Creature)
+   - Señal de terminación forzada (sin comida, timeout)
+   - Fuerza envío de mensaje `finished`
+
+**Patrón de comunicación:**
+- **Asincrónico**: No hay espera activa de respuestas
+- **Event-driven**: Reacciones basadas en eventos recibidos
+- **Timestamped**: Protección contra mensajes tardíos (3s grace period)
+- **CyclicBehaviour**: Recepción continua de mensajes
+- **PeriodicBehaviour**: Envío periódico de estados
+
+------------------------------------------------------------------------------------------------------------------------------------------------
+Características avanzadas implementadas
+------------------------------------------------------------------------------------------------------------------------------------------------
+
+### 1. **Sistema de Satisfacción con Objetivos Variables**
+- Objetivo inicial: 2 alimentos para reproducirse
+- Modo supervivencia (energía ≤ 35%): Objetivo reducido a 1 alimento
+- Permite estrategias adaptativas bajo presión energética
+- Implementado mediante `CreatureState` dataclass con flags: `satisfied`, `survival_mode`, `food_goal`
+
+### 2. **Retorno al Hogar Sin Costo Energético**
+- Criaturas satisfechas navegan hacia spawn point (`spawn_x`, `spawn_y`) sin drenar energía
+- Evita penalización por comportamiento exitoso
+- Flag `returning_home` controla este estado especial
+- Distancia < 0.5 unidades activa terminación con `satisfied=True`
+
+### 3. **Spawn Sincronizado y Distribución Equidistante**
+- **Barrier synchronization**: Señal `start_moving` después de spawn completo
+- **Perimeter distribution**: Criaturas distribuidas uniformemente en bordes del mundo
+- Algoritmo recorre perímetro rectangular: top → right → bottom → left
+- Garantiza fairness espacial (todas las criaturas equidistantes de recursos centrales)
+
+### 4. **Control Dinámico de Velocidad**
+- 5 velocidades disponibles: 0.25x, 0.5x, 1.0x, 1.5x, 2.0x
+- Modificación en tiempo real sin reiniciar simulación
+- Endpoint `/set_speed` actualiza periodo de `ReportBehav` de todas las criaturas
+- Útil para observación detallada (slow motion) o pruebas rápidas (fast forward)
+
+### 5. **Limpieza Automática de Reportes**
+- CSV limpiados al inicio de cada ejecución (`hostAgent.py`)
+- Previene acumulación de datos entre simulaciones
+- Archivos afectados:
+  - `generation_summary.csv`
+  - `generation_details.csv`
+  - `predation_events.csv`
+
+### 6. **Visualización de Estados con Colores**
+- **Gris**: Foraging inicial (0 alimentos)
+- **Azul**: Progreso hacia objetivo (1 alimento)
+- **Verde**: Satisfecha y retornando al spawn (≥2 alimentos)
+- Permite identificar visualmente comportamientos emergentes
 
 ------------------------------------------------------------------------------------------------------------------------------------------------
 Protección contra reintroducción
@@ -155,13 +344,33 @@ Registro rotativo con eventos importantes. Permite revisar:
 - Estados enviados por las criaturas
 
 generation_summary.csv
-Contiene métricas agregadas de cada generación, incluyendo número total de criaturas, comidas, depredaciones, supervivientes y duración.
+Métricas agregadas por generación:
+- `generation`: Número de generación
+- `num_creatures`: Cantidad inicial de criaturas
+- `num_foods`: Cantidad de alimento disponible
+- `survivors`: Criaturas que completaron el ciclo
+- `satisfied_creatures`: Criaturas que alcanzaron objetivo y retornaron (reproducción exitosa)
+- `exhausted_creatures`: Criaturas que agotaron energía
+- `avg_foods_eaten`: Promedio de alimentos consumidos
+- `duration_seconds`: Duración total de la generación
 
 generation_details.csv
-Reporte individual por criatura, con información de energía inicial, comida consumida, tiempo de vida, posición final y otros atributos.
+Reporte individual por criatura:
+- `generation`, `creature_jid`: Identificadores
+- `initial_energy`, `final_energy`: Estado energético
+- `foods_eaten`: Alimentos consumidos durante ciclo de vida
+- `lifetime_seconds`: Duración de vida
+- `speed`, `size`, `sense`: Atributos heredables
+- `final_x`, `final_y`: Posición de terminación
+- `satisfied`: Boolean indicando si alcanzó objetivo y retornó al spawn
 
 predation_events.csv
-Lista cronológica de eventos de depredación con predador, presa y coordenadas del evento.
+Registro cronológico de eventos de depredación y consumo:
+- `generation`: Número de generación
+- `timestamp`: Momento del evento
+- `predator_jid`: JID del agente que consumió
+- `prey_jid`: JID o identificador de comida consumida
+- `x`, `y`: Coordenadas del evento
 
 ------------------------------------------------------------------------------------------------------------------------------------------------
 Diagnóstico y depuración
@@ -183,18 +392,37 @@ Get-ChildItem .\report\run.log* | Get-Content -Tail 200
 Parámetros configurables
 ------------------------------------------------------------------------------------------------------------------------------------------------
 
-Los parámetros principales del mundo pueden modificarse en WorldConfig. Algunos de ellos:
-- Dimensiones del mapa
-- Energía inicial de las criaturas
-- Energía ganada al comer
-- Cantidad de pellets por generación
-- Número de criaturas iniciales
-- Duración máxima de la generación
-- Intervalo de reporte de estado
-- Frecuencia de refresco de la UI
-- Control de depredación
+Los parámetros principales del mundo pueden modificarse en `WorldConfig` (`world.py`):
 
-Si se desea mayor flexibilidad, ciertos valores actualmente codificados, como el tiempo de protección de reintroducción, pueden trasladarse a WorldConfig.
+**Dimensiones y energía:**
+- `space_size`: Dimensiones del mundo (default: 30x30)
+- `initial_energy`: Energía inicial de criaturas (default: 1.0)
+- `move_cost`: Costo energético por movimiento (default: 0.1)
+- `energy_per_food`: Energía ganada por alimento (default: 3.0)
+
+**Población y recursos:**
+- `num_pellets`: Cantidad de comida por generación (default: 20)
+- `num_creatures`: Criaturas iniciales (default: 10)
+
+**Comportamiento:**
+- `food_goal`: Objetivo de satisfacción normal (default: 2)
+- `survival_threshold`: Umbral para modo supervivencia (default: 0.35 = 35%)
+- `survival_food_goal`: Objetivo reducido en supervivencia (default: 1)
+
+**Temporización:**
+- `generation_duration`: Duración máxima de generación en segundos
+- `report_period`: Intervalo de envío de estados (default: 0.5s)
+- `monitor_period`: Intervalo de supervisión (default: 0.5s)
+- `last_eat_grace`: Tiempo de espera sin comida antes de terminar generación
+
+**UI y velocidad:**
+- `poll_interval`: Frecuencia de actualización de UI (default: 250ms)
+- Velocidad de simulación modificable en runtime (0.25x - 2.0x)
+
+**Atributos heredables:**
+- `speed`: Velocidad de movimiento (afecta distancia por tick)
+- `size`: Tamaño de criatura (futuro: colisiones, visibilidad)
+- `sense`: Radio de percepción para detectar comida
 
 ------------------------------------------------------------------------------------------------------------------------------------------------
 **AUTORES**

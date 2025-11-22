@@ -364,6 +364,7 @@ async function fetchData() {
 
     document.getElementById('creatures').textContent = data.fishes.length;
     document.getElementById('food').textContent = data.foods.length;
+    document.getElementById('gen').textContent = data.generation || '-';
 
     if (data.space_size) {
       worldSize.w = data.space_size[0];
@@ -514,3 +515,31 @@ function onWindowResize() {
 }
 
 window.addEventListener('DOMContentLoaded', init);
+
+// Manejadores de control de velocidad
+document.addEventListener('DOMContentLoaded', () => {
+  const speedButtons = document.querySelectorAll('.speed-btn');
+  
+  speedButtons.forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const speed = parseFloat(btn.dataset.speed);
+      
+      try {
+        const response = await fetch('/set_speed', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ speed })
+        });
+        
+        if (response.ok) {
+          // Actualizar UI: remover active de todos y agregarlo al clickeado
+          speedButtons.forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          console.log(`Speed set to ${speed}x`);
+        }
+      } catch (error) {
+        console.error('Error setting speed:', error);
+      }
+    });
+  });
+});

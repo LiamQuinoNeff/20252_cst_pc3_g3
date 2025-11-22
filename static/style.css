@@ -119,6 +119,39 @@ body::before {
     font-size: 13px;
 }
 
+#speed-controls {
+    display: flex;
+    gap: 6px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(148, 163, 184, 0.3);
+}
+
+.speed-btn {
+    padding: 5px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    background: rgba(30, 41, 59, 0.9);
+    color: #e5e7eb;
+    border: 1px solid rgba(148, 163, 184, 0.4);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.speed-btn:hover {
+    background: rgba(51, 65, 85, 0.95);
+    border-color: rgba(165, 180, 252, 0.6);
+    transform: translateY(-1px);
+}
+
+.speed-btn.active {
+    background: rgba(99, 102, 241, 0.9);
+    border-color: rgba(165, 180, 252, 0.8);
+    color: #fff;
+    box-shadow: 0 0 12px rgba(99, 102, 241, 0.5);
+}
+
 canvas {
     display: block;
 }
