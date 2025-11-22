@@ -75,20 +75,20 @@ Define WorldConfig con parámetros como dimensiones, energía inicial, cantidad 
 Funciones auxiliares como cálculos de distancia, generación de pellets, posiciones válidas y soporte general para cálculos del mapa.
 
 `logger_setup.py`
-Configuración del logger unificado. Guarda todo en report/run.log.
+Configuración del logger unificado. Guarda los logs en `report/run.log` con rotación (hasta 3 archivos de respaldo).
 
 `report/`
 Contiene los resultados generados automáticamente:
-- generation_summary.csv
-- generation_details.csv
-- predation_events.csv
-- run.log
+- `generation_summary.csv` (métricas agregadas por generación)
+- `generation_details.csv` (detalle por criatura)
+- `predation_events.csv` (lista de eventos de depredación)
+- `run.log` (log principal; además puede haber archivos rotados como `run.log.1`, `run.log.2`, ...)
 
 `static/`
-Archivos de la interfaz web.
-- index.html: archivo principal de visualización.
-- style.css: estilos para el canvas y la leyenda.
-- app.js: código que hace polling de /fishes y dibuja objetos en el canvas.
+Archivos de la interfaz web. Actualmente la UI soporta una visualización 3D (implementada con Three.js) y los controles/render se encuentran en `index.html` y `app.js`.
+- `index.html`: archivo principal de visualización (interfaz 3D usando Three.js).
+- `app.js`: código de la interfaz; además de hacer polling a `/fishes`, contiene la lógica de render 3D (Three.js) y los controles de cámara.
+- `style.css`: estilos para la interfaz.
 
 ------------------------------------------------------------------------------------------------------------------------------------------------
 Funcionamiento interno de la interfaz web
@@ -167,13 +167,17 @@ Lista cronológica de eventos de depredación con predador, presa y coordenadas 
 Diagnóstico y depuración
 ------------------------------------------------------------------------------------------------------------------------------------------------
 
-`Para buscar información específica en el log:`
+`Para buscar información específica en los logs:`
 powershell
-Select-String -Path .\report\run.log -Pattern "creature9_7"
+Select-String -Path .\report\run.log* -Pattern "creature9_7"
 
-`Para ver las últimas líneas del archivo:`
+`Para ver las últimas líneas del archivo (archivo activo):`
 powershell
 Get-Content .\report\run.log -Tail 200
+
+`Para revisar también los archivos rotados:`
+powershell
+Get-ChildItem .\report\run.log* | Get-Content -Tail 200
 
 ------------------------------------------------------------------------------------------------------------------------------------------------
 Parámetros configurables
@@ -191,3 +195,21 @@ Los parámetros principales del mundo pueden modificarse en WorldConfig. Algunos
 - Control de depredación
 
 Si se desea mayor flexibilidad, ciertos valores actualmente codificados, como el tiempo de protección de reintroducción, pueden trasladarse a WorldConfig.
+
+------------------------------------------------------------------------------------------------------------------------------------------------
+**AUTORES**
+------------------------------------------------------------------------------------------------------------------------------------------------
+
+| Nombre | Código de estudiante |
+|---|---|
+| Nathaly Eliane Anaya Vadillo | U202210644 |
+| Leonardo Leoncio Bravo Ricapa | U20211c688 |
+| Ariana Graciela Quelopana Puppo | U202122430 |
+| Liam Mikael Quino Neff | U20221E167 |
+
+
+------------------------------------------------------------------------------------------------------------------------------------------------
+**LICENCIA**
+------------------------------------------------------------------------------------------------------------------------------------------------
+
+Este proyecto se publica bajo la licencia MIT. Consulta el archivo `LICENSE` para el texto completo.

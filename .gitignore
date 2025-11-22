@@ -3,5 +3,6 @@ __pycache__/
 *.csv
 *.pyc
 static/
+report/
 run.log
 server.db
