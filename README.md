@@ -118,7 +118,7 @@ Cada CreatureAgent se comporta como una entidad autónoma con comportamientos co
 - **Survival Mode**: Activado cuando energía ≤ 35%, reduce objetivo de 2 a 1 alimento
 - **Satisfied**: Alcanzado el objetivo de comida, inicia retorno al spawn
 - **Returning Home**: Navegación sin costo energético hacia punto de origen
-- **Finished**: Terminación por satisfacción o agotamiento energético
+- **Finished**: Terminación por satisfacción, agotamiento energético o por muerte causada por una criatura más grande
 
 **Características del agente:**
 - Movimiento dentro de la cuadrícula con consumo energético proporcional
@@ -170,7 +170,7 @@ Contiene los resultados generados automáticamente:
 - `generation_summary.csv` (métricas agregadas por generación)
 - `generation_details.csv` (detalle por criatura)
 - `predation_events.csv` (lista de eventos de depredación)
-- `run.log` (log principal; además puede haber archivos rotados como `run.log.1`, `run.log.2`, ...)
+- `run.log` (log principal)
 
 `static/`
 Archivos de la interfaz web con visualización 3D:
@@ -180,12 +180,6 @@ Archivos de la interfaz web con visualización 3D:
   - Canvas para renderizado 3D
 - `app.js`: Lógica de visualización:
   - Polling a `/fishes` cada 250ms
-  - Renderizado 3D con Three.js (criaturas como esferas, comida como cubos)
-  - Sistema de colores por estado:
-    - Gris: 0 alimentos consumidos
-    - Azul: 1 alimento consumido
-    - Verde: 2 alimentos (satisfecha, retornando)
-  - Efectos visuales de eliminación (flash rojo)
   - Control de velocidad mediante POST a `/set_speed`
 - `style.css`: Estilos para UI y botones de control
 
@@ -205,12 +199,8 @@ La interfaz funciona mediante polling al endpoint `/fishes` cada 250ms.
    - `space_size`: Dimensiones del mundo
 
 3. **Renderizado 3D con Three.js:**
-   - Criaturas: Esferas coloreadas por estado
-     - Gris: 0 alimentos (`foods_eaten === 0`)
-     - Azul: 1 alimento (`foods_eaten === 1`)
-     - Verde: Satisfecha, retornando (`foods_eaten >= 2`)
-   - Comida: Cubos amarillos en posiciones disponibles
-   - Eliminaciones: Flash rojo temporal en última posición conocida
+   - Criaturas: Figuras ovaladas con colores aleatorios
+   - Comida: Esferas verdes en posiciones disponibles
    - Grid: Plano de referencia con líneas de cuadrícula
 
 4. **Controles de velocidad:**
@@ -301,12 +291,6 @@ Características avanzadas implementadas
   - `generation_summary.csv`
   - `generation_details.csv`
   - `predation_events.csv`
-
-### 6. **Visualización de Estados con Colores**
-- **Gris**: Foraging inicial (0 alimentos)
-- **Azul**: Progreso hacia objetivo (1 alimento)
-- **Verde**: Satisfecha y retornando al spawn (≥2 alimentos)
-- Permite identificar visualmente comportamientos emergentes
 
 ------------------------------------------------------------------------------------------------------------------------------------------------
 Protección contra reintroducción
@@ -423,6 +407,85 @@ Los parámetros principales del mundo pueden modificarse en `WorldConfig` (`worl
 - `speed`: Velocidad de movimiento (afecta distancia por tick)
 - `size`: Tamaño de criatura (futuro: colisiones, visibilidad)
 - `sense`: Radio de percepción para detectar comida
+
+
+------------------------------------------------------------------------------------------------------------------------------------------------
+**DECLARACIÓN DE USO DE IA Y EJERCICIOS DE CLASE**
+------------------------------------------------------------------------------------------------------------------------------------------------
+
+**EJERCICIO SEMANA 10 - PECESITOS**
+
+Este proyecto se basa en conceptos y estructuras presentadas en los ejercicios de la Semana 10 (simulación de peces con SPADE) y otros ejemplos introductorios de agentes. A continuación se detallan las correspondencias directas entre el código del proyecto y los ejercicios de clase.
+
+Inspiración del ejercicio “fish.py” (pecesito):
+El comportamiento de movimiento y atributos básicos de las criaturas deriva del modelo visto en clase: un agente con posición, tamaño y velocidad que se actualiza cada ciclo. En el proyecto, esto se refleja en:
+	•	CreatureState (creatureAgent.py): definición de size, speed, x, y, sense, foods_eaten, energy.
+	•	ReportBehav.run() (creatureAgent.py): lógica de desplazamiento por tick, cálculos de cambio de posición, consumo energético y envío de estado.
+	•	utils.random_size(), utils.random_speed(), utils.default_energy_for_speed(): funciones basadas en la relación tamaño–velocidad presentada en el ejercicio del pez.
+
+Inspiración del ejercicio “dummy.py”:
+El patrón básico de un agente SPADE con async def setup() proviene del ejemplo DummyAgent. Se reutiliza en:
+	•	GenerationAgent.setup() (generationAgent.py): inicialización del supervisor y registro de behaviours.
+	•	CreatureAgent.setup() (creatureAgent.py): configuración inicial de estado y behaviours del agente criatura.
+	•	Estructura de arranque con spade.run(main()) en hostAgent.py.
+
+Inspiración del ejercicio “cyclic.py” (CyclicBehaviour y PeriodicBehaviour):
+El uso de behaviours internos y ciclos de ejecución periódicos proviene del ejemplo del contador. Se adapta de forma más compleja en:
+	•	GenerationAgent.RecvBehav(CyclicBehaviour): recepción continua de mensajes de criaturas para coordinar eventos y depredación.
+	•	GenerationAgent.MonitorBehav(PeriodicBehaviour): verificación periódica del tiempo de generación.
+	•	CreatureAgent.ReportBehav(PeriodicBehaviour): envío periódico del estado y actualización energética.
+	•	CreatureAgent.RecvBehav(CyclicBehaviour): manejo de mensajes entrantes (comida, finalización, etc.).
+
+Inspiración del Host de la Semana 10 (visualización de peces):
+El diseño del Host que recibe estados y expone /fishes como endpoint JSON se basa directamente en dicho ejercicio. En el proyecto toma forma en:
+	•	HostAgent.RecvBehav: almacenamiento de estados, administración de criaturas activas y registro de eliminaciones.
+	•	HostAgent._start_web(): servidor aiohttp que expone /fishes, limpiando criaturas eliminadas y sincronizando con la UI.
+	•	Mecanismo de limpieza temporal (removals) inspirado en la necesidad abordada en los ejemplos: evitar que mensajes tardíos reintroduzcan agentes eliminados.
+
+**EJERCICIO SEMANA 11 - Aviones y Torre de Control**
+
+El proyecto también toma conceptos fundamentales del ejercicio de clase basado en la simulación de aviones y una torre de control en SPADE. Ese ejercicio enseñaba cómo múltiples agentes independientes coordinan sus acciones mediante mensajes estructurados (request, ack, status) y cómo un agente central supervisa el estado global. En el proyecto, estas ideas se ven reflejadas en los siguientes componentes:
+
+Patrón Torre–Entidad (inspirado en torreAgent.py):
+En el ejercicio, la Torre recibía mensajes de los aviones, mantenía su estado y enviaba respuestas. En el proyecto, este patrón se refleja directamente en:
+	•	GenerationAgent.RecvBehav (generationAgent.py): recepción continua de mensajes de criaturas, actualización de registros y validación de eventos.
+	•	HostAgent.RecvBehav (hostAgent.py): comportamiento análogo a la Torre; mantiene un mapa actualizado de criaturas y notifica eliminaciones.
+	•	HostAgent._start_web(): equivalente a la Torre como punto central que expone el estado global.
+
+Patrón Entidad que reporta su estado (inspirado en avionAgent.py):
+Los aviones enviaban periódicamente mensajes con posición y estado. Este patrón fue adoptado en:
+	•	CreatureAgent.ReportBehav.run() (creatureAgent.py): envío periódico del estado completo de la criatura (x, y, size, speed, energy, foods_eaten).
+	•	CreatureAgent.RecvBehav: recepción de instrucciones externas (finalización, confirmación de comida, remoción).
+Tal como el avión informaba su ubicación y condición, las criaturas reportan su estado al supervisor.
+
+Patrón request–response (inspirado en senderAgent.py y receiverAgent.py):
+El ejercicio mostraba cómo un agente envía un mensaje y espera una respuesta coherente del receptor. En el proyecto, este patrón se mantiene en:
+	•	GenerationAgent.handle_food_request() implícito dentro de RecvBehav: cuando una criatura informa que llegó a una comida, el GenerationAgent responde confirmando o rechazando la adquisición.
+	•	CreatureAgent.RecvBehav: espera respuestas del GenerationAgent que modifican la energía o informan eventos.
+
+Estructura de arranque centralizada (inspirado en all.py):
+El ejercicio mostraba cómo iniciar múltiples agentes y un host coordinador desde un único archivo. Esto se refleja en:
+	•	hostAgent.main(): arranca HostAgent, inicia GenerationAgent y prepara el entorno web.
+	•	Uso del patrón spade.run(main()), heredado directamente del ejemplo de aviones.
+
+Mensajes estructurados con contenido JSON (inspirado en el intercambio Torre–Avión):
+En el ejercicio, los aviones enviaban diccionarios con atributos tales como altitud, posición y estado. En el proyecto, esto se replica mediante:
+	•	Mensajes JSON enviados desde CreatureAgent.ReportBehav al GenerationAgent.
+	•	Mensajes JSON procesados en GenerationAgent.RecvBehav y en HostAgent.RecvBehav.
+
+
+**DECLARACION DE USO DE IA (INTELIGENCIA ARTIFICIAL)**
+
+Durante la implementación del sistema se emplearon herramientas de asistencia basadas en IA como apoyo complementario al proceso de desarrollo. Estas herramientas se usaron principalmente para dinamizar el “flow” de trabajo y facilitar decisiones de diseño mientras se construía la simulación.
+
+Principales usos de la IA en el proyecto:
+	•	Idear y refinar estructuras iniciales de módulos y behaviours, manteniendo un estilo homogéneo entre agentes.
+	•	Generar borradores de funciones repetitivas o plantillas base para clases (CreatureAgent, GenerationAgent, HostAgent) para acelerar el ritmo de codificación.
+	•	Convertir ideas sueltas en código más claro, ayudando a mantener coherencia entre movimiento, reporte de estado y sincronización.
+	•	Asistir en la documentación técnica y organización del README, permitiendo explicar mejor decisiones internas del proyecto.
+	•	Apoyar el estilo de desarrollo ágil, donde se alterna entre ideación rápida, prueba, ajuste y mejora continua.
+
+El uso de IA permitió mantener un ritmo de desarrollo fluido, estructurado y más consistente, especialmente al trabajar con múltiples agentes y comportamientos concurrentes.
 
 ------------------------------------------------------------------------------------------------------------------------------------------------
 **AUTORES**
