@@ -46,6 +46,8 @@ class GenerationAgent(Agent):
         self.spawned_map = {}
         # flag para evitar llamadas reentrantes a _end_generation
         self._ending = False
+        # flag para señalar que se deben enviar mensajes de inicio
+        self.pending_start_signal = False
             # archivos CSV para reportes
             # crear directorio de reportes y rutas de archivos CSV
         self.report_dir = os.path.join(os.path.dirname(__file__), "report")
@@ -112,6 +114,9 @@ class GenerationAgent(Agent):
         except Exception:
             pass
 
+        # Calcular posiciones en el borde con distribución equidistante
+        spawn_positions = utils.spawn_positions_on_perimeter(len(to_spawn), self.space_size)
+
         # arrancar agentes criatura (crear todos primero, luego iniciarlos en paralelo)
         agents_to_start = []
         i = 0
@@ -134,10 +139,8 @@ class GenerationAgent(Agent):
             agent.generation_jid = str(self.jid).split("/")[0]
             w, h = self.space_size
             agent.space_size = self.space_size
-            # Spawn at edge of platform
-            edge_pos = utils.spawn_position_on_edge(self.space_size)
-            agent.init_x = edge_pos[0]
-            agent.init_y = edge_pos[1]
+            # Usar posición del borde en lugar de aleatoria
+            agent.init_x, agent.init_y = spawn_positions[i]
             agent.config = self.config
             self.spawned_map[jid] = agent
             self.creatures_info[jid_base] = {"jid_full": jid, "foods_eaten": 0, "alive": True, "speed": speed, "energy": energy, "size": size, "sense": sense, "x": agent.init_x, "y": agent.init_y}
@@ -156,6 +159,13 @@ class GenerationAgent(Agent):
                 pass
         
         await asyncio.gather(*[start_agent(info) for info in agents_to_start])
+        
+        # Esperar un momento para que todas las criaturas se registren completamente
+        await asyncio.sleep(0.5)
+        
+        # Marcar que se debe enviar señal de inicio (el behaviour lo hará)
+        print(f"All creatures spawned. Signaling start...")
+        self.pending_start_signal = True
 
         # una vez arrancados todos los agentes de la generación, desbloquear su movimiento a la vez
         try:
@@ -169,6 +179,17 @@ class GenerationAgent(Agent):
 
     class RecvBehav(CyclicBehaviour):
         async def run(self):
+            # Revisar si hay señal de inicio pendiente
+            if getattr(self.agent, "pending_start_signal", False):
+                self.agent.pending_start_signal = False
+                print("Sending start_moving messages to all creatures...")
+                for jid in list(self.agent.active_creature_jids):
+                    start_msg = Message(to=jid)
+                    start_msg.set_metadata("performative", "inform")
+                    start_msg.body = json.dumps({"type": "start_moving"})
+                    await self.send(start_msg)
+                print("Start signal sent to all creatures.")
+            
             msg = await self.receive(timeout=1)
             if msg is None:
                 return
@@ -450,36 +471,24 @@ class GenerationAgent(Agent):
 
     class MonitorBehav(PeriodicBehaviour):
         async def run(self):
-            # Si ya estamos terminando esta generación, no hacer nada
-            if getattr(self.agent, "_ending", False):
-                return
-
-            # Considerar criaturas hambrientas: vivas, con energía>0 y foods_eaten == 0
-            hungry_bases = []
-            for base, info in list(self.agent.creatures_info.items()):
-                if not info.get("alive", True):
-                    continue
-                foods = info.get("foods_eaten", 0)
-                energy = info.get("energy", 0)
-                if foods == 0 and energy > 0:
-                    hungry_bases.append(base)
-
-            # Loguear cuántos individuos siguen hambrientos en esta generación
-            try:
-                logger.info(f"Monitor: gen={self.agent.generation} hungry={len(hungry_bases)} bases={hungry_bases}")
-            except Exception:
-                pass
-
-            if not hungry_bases:
-                await self.agent._end_generation()
+            # Si no quedan creatures activos -> finalizar generación
+            if len(self.agent.active_creature_jids) == 0:
+                await self.agent._end_generation(self)
                 return
 
             # Si no queda comida y no se ha comido nada en los últimos `last_eat_grace` -> terminar generación
-            # (desactivado: ahora la generación termina solo cuando no queden creatures activos)
-            if False and len(self.agent.foods) == 0 and (time.time() - self.agent.last_eat_time) > getattr(self.agent.config, "last_eat_grace", 3.0):
-                pass
+            if len(self.agent.foods) == 0 and (time.time() - self.agent.last_eat_time) > getattr(self.agent.config, "last_eat_grace", 3.0):
+                # instruir a las criaturas activas a terminar
+                for jid in list(self.agent.active_creature_jids):
+                    msg = Message(to=jid)
+                    msg.set_metadata("performative", "inform")
+                    msg.body = json.dumps({"type": "generation_end"})
+                    await self.send(msg)
+                # esperar un momento y luego forzar el end
+                await asyncio.sleep(1)
+                await self.agent._end_generation(self)
 
-    async def _end_generation(self):
+    async def _end_generation(self, behaviour):
         if self._ending:
             return
         self._ending = True
@@ -494,7 +503,7 @@ class GenerationAgent(Agent):
             msg = Message(to=jid)
             msg.set_metadata("performative", "inform")
             msg.body = json.dumps({"type": "generation_end"})
-            await self.send(msg)
+            await behaviour.send(msg)
 
         # esperar un breve periodo para recolectar mensajes 'finished'
         await asyncio.sleep(1.5)
