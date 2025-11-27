@@ -29,6 +29,7 @@ class CreatureState:
 	spawn_x: float = 0.0
 	spawn_y: float = 0.0
 	returning_home: bool = False
+	kills: int = 0  # Contador de depredaciones
 
 
 class CreatureAgent(Agent):
@@ -157,9 +158,11 @@ class CreatureAgent(Agent):
 				"x": state.x,
 				"y": state.y,
 				"energy": state.energy,
+				"speed": state.speed,
 				"size": state.size,
 				"sense": state.sense,
 				"foods_eaten": state.foods_eaten,
+				"kills": state.kills,
 			}
 			msg = Message(to=self.agent.generation_jid)
 			msg.set_metadata("performative", "inform")

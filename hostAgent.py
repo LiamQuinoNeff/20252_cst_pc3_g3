@@ -54,6 +54,7 @@ class HostAgent(Agent):
                     "speed": data.get("speed", 0),
                     "size": data.get("size", None),
                     "sense": data.get("sense", None),
+                    "kills": data.get("kills", 0),
                 }
             elif data.get("type") == "generation_start":
                 # limpiar las criaturas previas al iniciar una nueva generación
@@ -148,8 +149,44 @@ class HostAgent(Agent):
             except Exception as e:
                 return aiohttp.web.json_response({"success": False, "error": str(e)}, status=400)
 
+        async def kill_controller(request):
+            """HTTP endpoint to request killing a specific creature by JID.
+            
+            The frontend sends {"jid": "creatureX_Y@localhost"} and we forward
+            a SPADE message to the GenerationAgent so it can perform a proper kill.
+            """
+            try:
+                payload = await request.json()
+            except Exception:
+                return aiohttp.web.json_response({"ok": False, "error": "invalid_json"}, status=400)
+
+            jid = payload.get("jid")
+            if not jid:
+                return aiohttp.web.json_response({"ok": False, "error": "missing_jid"}, status=400)
+
+            # Determine GenerationAgent JID
+            try:
+                gen_jid = str(self.gen.jid).split("/")[0] if hasattr(self, "gen") and self.gen is not None else None
+            except Exception:
+                gen_jid = None
+
+            if not gen_jid:
+                return aiohttp.web.json_response({"ok": False, "error": "no_generation"}, status=500)
+
+            # Send kill command to GenerationAgent
+            try:
+                msg = Message(to=gen_jid)
+                msg.set_metadata("performative", "inform")
+                msg.body = json.dumps({"type": "kill", "target_jid": jid})
+                await self.send(msg)
+            except Exception:
+                return aiohttp.web.json_response({"ok": False, "error": "send_failed"}, status=500)
+
+            return aiohttp.web.json_response({"ok": True})
+
         app.router.add_get('/fishes', fishes_controller)
         app.router.add_post('/set_speed', set_speed)
+        app.router.add_post('/kill', kill_controller)
         # servir archivos estáticos
         if os.path.isdir(static_folder):
             app.router.add_static('/static/', path=static_folder, name='static')

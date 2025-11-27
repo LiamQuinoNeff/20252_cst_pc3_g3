@@ -152,7 +152,7 @@ class GenerationAgent(Agent):
             agent.init_x, agent.init_y = spawn_positions[i]
             agent.config = self.config
             self.spawned_map[jid] = agent
-            self.creatures_info[jid_base] = {"jid_full": jid, "foods_eaten": 0, "alive": True, "speed": speed, "energy": energy, "size": size, "sense": sense, "x": agent.init_x, "y": agent.init_y}
+            self.creatures_info[jid_base] = {"jid_full": jid, "foods_eaten": 0, "alive": True, "speed": speed, "energy": energy, "size": size, "sense": sense, "x": agent.init_x, "y": agent.init_y, "kills": 0}
             self.active_creature_jids.add(jid)
             self.spawned_agents.append(agent)
             agents_to_start.append((agent, jid, speed, energy, size, sense))
@@ -245,6 +245,9 @@ class GenerationAgent(Agent):
                     # speed también puede actualizarse si el creature cambia (por seguridad)
                     if "speed" in data:
                         info["speed"] = data.get("speed")
+                    # actualizar kills si viene en el status
+                    if "kills" in data:
+                        info["kills"] = data.get("kills")
 
                     # Predation: the reporting creature may attack nearby smaller creatures
                     try:
@@ -294,6 +297,8 @@ class GenerationAgent(Agent):
                             gained = prey_food_scale * (float(o_size) ** 3)
                             info["foods_eaten"] = info.get("foods_eaten", 0) + 1
                             info["energy"] = float(info.get("energy", 0)) + gained
+                            # Incrementar contador de kills del depredador
+                            info["kills"] = info.get("kills", 0) + 1
                             print(f"  {sender} predated on {other_base} at d={d:.2f}, energy+={gained:.2f}")
                             try:
                                 logger.info(f"{sender} predated on {other_base} at d={d:.2f}, energy+={gained:.2f}")
@@ -378,6 +383,17 @@ class GenerationAgent(Agent):
                 else:
                     target_msg.body = json.dumps({"type": "no_target"})
                 await self.send(target_msg)
+            elif mtype == "kill":
+                # Mensaje desde HostAgent para matar una criatura específica (UI curse tool)
+                target_jid = data.get("target_jid")
+                if target_jid and target_jid in self.agent.active_creature_jids:
+                    logger.info(f"Kill request for {target_jid} from UI")
+                    # Enviar mensaje de terminación a la criatura
+                    end_msg = Message(to=target_jid)
+                    end_msg.set_metadata("performative", "inform")
+                    end_msg.body = json.dumps({"type": "generation_end"})
+                    await self.send(end_msg)
+                    
             elif mtype == "finished":
                 # Marca criatura como finalizada
                 base = sender.split("@")[0]

@@ -29,8 +29,8 @@ class WorldConfig:
     size_max: float = 1.8
     sense_min: float = 0.0
     sense_max: float = 2.0
-    initial_size: float = None
-    initial_sense: float = None
+    initial_size: float = 1.0
+    initial_sense: float = 1.0
 
     # Escalas de energía y detección para convertir magnitudes de la fórmula a energía por tick
     energy_scale: float = 0.02
