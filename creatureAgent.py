@@ -180,22 +180,22 @@ class CreatureAgent(Agent):
 				except Exception:
 					pass
 
-			# Si la energía se agotó, notificar finalización y detener el agente
+			# Si la energía se agotó, notificar muerte por hambre (exhausted) y detener el agente
 			if state.energy <= 0:
 				end_msg = Message(to=self.agent.generation_jid)
 				end_msg.set_metadata("performative", "inform")
 				end_msg.body = json.dumps({"type": "finished", "jid": state.jid, "foods_eaten": state.foods_eaten, "energy": state.energy, "size": state.size, "sense": state.sense})
 				await self.send(end_msg)
 				try:
-					logger.info(f"Creature {state.jid} finished energy={state.energy:.3f} foods={state.foods_eaten} size={state.size:.3f} sense={state.sense:.3f}")
+					logger.info(f"Creature {state.jid} exhausted energy={state.energy:.3f} foods={state.foods_eaten} size={state.size:.3f} sense={state.sense:.3f}")
 				except Exception:
 					pass
-				# also inform host UI if present
+				# Notificar al host UI como creature_removed con reason=exhausted
 				host_jid = getattr(self.agent, "host_jid", None)
 				if host_jid:
 					host_end = Message(to=host_jid)
 					host_end.set_metadata("performative", "inform")
-					host_end.body = end_msg.body
+					host_end.body = json.dumps({"type": "creature_removed", "jid": state.jid, "reason": "exhausted"})
 					try:
 						await self.send(host_end)
 					except Exception:
@@ -237,18 +237,23 @@ class CreatureAgent(Agent):
 					energy_gain = fes * (self.agent.state.size ** 3)
 				self.agent.state.energy += energy_gain
 				# enviar ack opcional
+			
+			# Manejar confirmación de kill (actualizar contador de asesinatos)
+			if data.get("type") == "kill_confirmed":
+				self.agent.state.kills = data.get("kills", self.agent.state.kills)
+			
 			elif data.get("type") == "generation_end":
-				# La generación terminó: enviar estado final (`finished`) y detener
+				# La generación terminó (timeout u otra razón): enviar estado final y notificar remoción
 				end_msg = Message(to=self.agent.generation_jid)
 				end_msg.set_metadata("performative", "inform")
 				end_msg.body = json.dumps({"type": "finished", "jid": self.agent.state.jid, "foods_eaten": self.agent.state.foods_eaten, "energy": self.agent.state.energy, "size": self.agent.state.size, "sense": self.agent.state.sense})
 				await self.send(end_msg)
-				# also inform host UI if present
+				# Notificar al host UI como creature_removed con reason=finished (desvanecimiento limpio)
 				host_jid = getattr(self.agent, "host_jid", None)
 				if host_jid:
 					host_end = Message(to=host_jid)
 					host_end.set_metadata("performative", "inform")
-					host_end.body = end_msg.body
+					host_end.body = json.dumps({"type": "creature_removed", "jid": self.agent.state.jid, "reason": "finished"})
 					try:
 						await self.send(host_end)
 					except Exception:

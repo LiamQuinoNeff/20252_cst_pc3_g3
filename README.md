@@ -199,11 +199,51 @@ La interfaz funciona mediante polling al endpoint `/fishes` cada 250ms.
    - `space_size`: Dimensiones del mundo
 
 3. **Renderizado 3D con Three.js:**
-   - Criaturas: Figuras ovaladas con colores aleatorios
-   - Comida: Esferas verdes en posiciones disponibles
-   - Grid: Plano de referencia con líneas de cuadrícula
+   - **Criaturas**: Geometría orgánica tipo blob con:
+     - Colores dinámicos basados en velocidad (verde = lento → rojo = rápido)
+     - Animaciones de respiración y flotación natural
+     - Escala proporcional al tamaño (`size`)
+     - Intensidad emisiva según nivel de energía
+   - **Comida**: Esferas verdes luminosas con suave emisión
+   - **Fondo espacial**: Múltiples capas de estrellas animadas con galaxias giratorias
+   - **Grid**: Plano de referencia con líneas sutiles
 
-4. **Controles de velocidad:**
+4. **Sistema de selección de criaturas:**
+   - Click en cualquier blob para seleccionarlo
+   - Panel lateral muestra estadísticas en tiempo real:
+     - ID de Criatura
+     - Generación
+     - Velocidad
+     - Energía
+     - Tamaño
+     - Sentido (rango de percepción)
+     - Comida comida (contador)
+     - Asesinatos (contador de depredaciones)
+   - Contorno visual destacado alrededor del blob seleccionado
+   - Stats se actualizan inmediatamente al depredar o consumir comida
+
+5. **Gráfico de distribución de velocidad:**
+   - Histograma en tiempo real mostrando distribución de velocidades
+   - 10 bins desde velocidad mínima a máxima
+   - Color degradado verde→amarillo→rojo según velocidad
+   - Actualización dinámica cada 500ms
+   - Permite observar presión selectiva y evolución de la población
+
+6. **Animaciones de muerte diferenciadas:**
+   - **Depredación** (`reason=killed`): Explosión de sangre con partículas rojas dispersándose
+   - **Muerte por hambre** (`reason=exhausted`): Explosión de sangre (muerte dramática)
+   - **Satisfacción** (`reason=finished`): Desvanecimiento limpio sin sangre
+   - **Timeout de generación**: Desvanecimiento pacífico
+   - Manchas de sangre persistentes durante la generación
+   - Limpieza automática de sangre al cambiar de generación
+
+7. **Herramienta de maldición (Curse Tool):**
+   - Icono de calavera draggable en la esquina
+   - Arrastrar y soltar sobre un blob para eliminarlo instantáneamente
+   - Envía solicitud POST a `/kill` con el JID de la criatura
+   - Permite observar efectos de eliminación selectiva
+
+8. **Controles de velocidad:**
    - Botones modifican el periodo de `ReportBehav` en todas las criaturas
    - 0.25x = 2.0s periodo (slow motion)
    - 0.5x = 1.0s periodo
@@ -211,10 +251,144 @@ La interfaz funciona mediante polling al endpoint `/fishes` cada 250ms.
    - 1.5x = 0.33s periodo
    - 2.0x = 0.25s periodo (fast forward)
    - POST a `/set_speed` actualiza dinámicamente sin reiniciar simulación
+   - Polling dinámico: intervalo de actualización se ajusta según timeScale (250ms/timeScale, mínimo 100ms)
 
-5. **OrbitControls:** Permite rotación, zoom y paneo de la cámara 3D
+9. **OrbitControls:** Permite rotación, zoom y paneo de la cámara 3D
 
-El canvas se redibuja completamente en cada ciclo para reflejar cambios en tiempo real.
+El canvas se redibuja completamente en cada ciclo para reflejar cambios en tiempo real. El sistema de colores dinámico permite identificar visualmente criaturas rápidas (rojizas) vs lentas (verdosas), facilitando observación de patrones evolutivos.
+
+------------------------------------------------------------------------------------------------------------------------------------------------
+Mejoras visuales y sistema de feedback en tiempo real
+------------------------------------------------------------------------------------------------------------------------------------------------
+
+### **1. Colores dinámicos basados en velocidad**
+Cada blob tiene un color que representa su atributo de velocidad:
+- **Verde (HSL 120°)**: Criaturas lentas (velocidad mínima)
+- **Amarillo (HSL 60°)**: Criaturas de velocidad media
+- **Rojo (HSL 0°)**: Criaturas rápidas (velocidad máxima)
+
+**Implementación:**
+```javascript
+const minSpeed = 0.5, maxSpeed = 2.0;
+const speedNorm = (speed - minSpeed) / (maxSpeed - minSpeed);
+const hue = (1 - speedNorm) * 120; // Verde a Rojo
+```
+
+Esto permite identificar a simple vista la distribución de velocidades en la población y observar cómo la presión selectiva favorece ciertos rangos.
+
+### **2. Panel de estadísticas por criatura**
+Al hacer click en cualquier blob, se despliega un panel lateral con 8 métricas en tiempo real:
+
+| Campo | Descripción | Formato |
+|-------|-------------|---------|
+| **ID Criatura** | JID único del agente | `creature0_3` |
+| **Generación** | Número de generación actual | `Gen 2` |
+| **Velocidad** | Atributo heredable de velocidad | `1.23` |
+| **Energía** | Nivel actual de energía | `5.67` |
+| **Tamaño** | Factor de tamaño (afecta depredación) | `1.45` |
+| **Sentido** | Radio de percepción | `0.85` |
+| **Comida comida** | Contador de alimentos consumidos | `2` |
+| **Asesinatos** | Contador de depredaciones exitosas | `1` |
+
+**Actualización en tiempo real:**
+- Cada mensaje `status` del backend actualiza el panel si el blob está seleccionado
+- Actualización inmediata al depredar (contador de kills sube instantáneamente)
+- Sincronización perfecta: backend → `kill_confirmed` message → `creatureAgent.state.kills` → status report → frontend display
+
+### **3. Gráfico de distribución de velocidad**
+Histograma dinámico tipo bar chart que muestra la distribución poblacional:
+
+**Características:**
+- **10 bins** desde velocidad mínima (0.5) a máxima (2.0)
+- Colores de barras siguen mismo esquema verde→amarillo→rojo
+- Altura de barra = cantidad de criaturas en ese rango
+- Actualización cada 500ms
+- Eje Y adaptativo (escala automática según población máxima)
+
+**Utilidad científica:**
+- Observar deriva genética: distribución inicial uniforme → distribución sesgada por selección
+- Identificar presión selectiva: si recursos escasos, criaturas rápidas dominan (barras rojas más altas)
+- Detectar cuellos de botella: súbita reducción de diversidad genética
+- Validar herencia: distribución de siguiente generación refleja padres supervivientes
+
+### **4. Sistema de animaciones de muerte**
+Tres tipos de animación según causa de muerte:
+
+#### **Depredación** (`reason=killed`, `killed_by` presente)
+```javascript
+playBloodDeath(mesh, jid, isPredation=true)
+```
+- Explosión de **20 partículas de sangre** rojas (#ff0000)
+- Dispersión radial con velocidades aleatorias (0.05-0.15 unidades/frame)
+- Partículas descienden (gravedad simulada)
+- Manchas de sangre persistentes en el suelo (decals rojos)
+- Duración: 1.2 segundos
+- Efecto visual dramático para destacar evento de depredación
+
+#### **Muerte por hambre** (`reason=exhausted`)
+```javascript
+playBloodDeath(mesh, jid, isPredation=false)
+```
+- Misma animación de sangre que depredación
+- Indica muerte violenta por agotamiento extremo
+- Permite distinguir visualmente criaturas que murieron sin ser atacadas
+
+#### **Satisfacción/Timeout** (`reason=finished`)
+```javascript
+playFadeOut(mesh, jid)
+```
+- Desvanecimiento suave y limpio (fade opacity 1.0 → 0.0)
+- Reducción de tamaño al 50%
+- Sin partículas de sangre
+- Duración: 400ms
+- Representa terminación pacífica (objetivo cumplido o timeout)
+
+**Gestión de manchas de sangre:**
+- Array `bloodStains` almacena todas las manchas generadas en la generación
+- Función `cleanupBloodStains()` se ejecuta al cambiar de generación
+- Limpieza completa: remove from scene + dispose geometry/material
+- Previene acumulación de objetos 3D y memory leaks
+
+### **5. Herramienta de eliminación manual (Curse Tool)**
+Icono de calavera draggable que permite intervención manual:
+
+**Funcionamiento:**
+1. Usuario arrastra calavera desde esquina superior derecha
+2. Suelta sobre un blob en el canvas
+3. Raycasting de Three.js detecta criatura bajo cursor
+4. POST request a `/kill` endpoint: `{jid: "creature1_5"}`
+5. Backend elimina agente y notifica como `creature_removed`
+6. Frontend reproduce animación de sangre
+
+**Utilidad:**
+- Experimentos controlados: eliminar selectivamente criaturas lentas/rápidas
+- Observar impacto de eliminación artificial en distribución
+- Debugging: forzar eventos de muerte para probar animaciones
+
+### **6. Sincronización de movimiento mejorada**
+Para evitar desincronización entre backend y frontend:
+
+**Antes (problema):**
+- `movementScale = Math.pow(timeScale, 0.5)` suavizaba excesivamente
+- `baseMoveSpeed = 2.6` demasiado lento
+- Polling fijo 250ms no se adaptaba a timeScale
+- Resultado: criaturas lentas, comida desaparecía sin contacto visible
+
+**Después (solución):**
+- `movementScale = timeScale` (lineal, sin suavizado)
+- `baseMoveSpeed = 8.0` (movimiento más fluido)
+- `visualFactor = speed` (directo, sin exponencial)
+- Polling dinámico: `interval = 250ms / timeScale` (min 100ms)
+- Resultado: sincronización perfecta, movimientos fluidos
+
+**Fórmula de polling adaptativo:**
+```javascript
+const baseInterval = 250;
+const dynamicInterval = Math.max(100, baseInterval / timeScale);
+```
+
+A 2x velocidad → 125ms polling (más actualizaciones)
+A 0.25x velocidad → 250ms polling (menos frecuencia necesaria)
 
 ------------------------------------------------------------------------------------------------------------------------------------------------
 Modelo de comunicación
@@ -234,20 +408,40 @@ Los agentes SPADE se comunican mediante mensajes XMPP con arquitectura asincrón
    - Contenido: `food_pos` (coordenadas)
    - Genera registro en `predation_events.csv` si aplica
 
-3. **finished** (Creature → Generation, Creature → Host)
-   - Enviado al terminar ciclo de vida
-   - Contenido: `foods_eaten`, `energy`, `size`, `sense`, `satisfied` (opcional)
-   - `satisfied=True`: Criatura alcanzó objetivo y retornó al spawn
-   - `satisfied` ausente: Criatura agotó energía
+3. **eat_confirm** (Generation → Creature)
+   - Confirmación de consumo de comida o depredación exitosa
+   - Contenido: `jid`, `energy_gain`, `prey` (opcional)
+   - Incrementa `foods_eaten` y restaura energía en la criatura
 
-4. **start_moving** (Generation → Creature)
+4. **kill_confirmed** (Generation → Creature)
+   - Notificación de depredación exitosa
+   - Contenido: `kills` (nuevo valor del contador)
+   - Actualiza `state.kills` en el depredador
+   - Permite sincronización inmediata con frontend (panel de stats)
+
+5. **creature_removed** (Creature/Generation → Host)
+   - Notificación de eliminación para actualizar UI
+   - Contenido: `jid`, `reason`, `killed_by` (opcional)
+   - Razones posibles:
+     - `killed`: Depredación → animación de sangre
+     - `exhausted`: Muerte por hambre → animación de sangre
+     - `finished`: Satisfacción/timeout → desvanecimiento limpio
+   - Host agrega a array `removals` para procesamiento en frontend
+
+6. **finished** (Creature → Generation)
+   - Enviado al terminar ciclo de vida natural
+   - Contenido: `foods_eaten`, `energy`, `size`, `sense`, `kills`
+   - Usado para cálculo de métricas generacionales
+
+7. **start_moving** (Generation → Creature)
    - Enviado después de spawn completo (barrier synchronization)
    - Activa flag `can_move` en criaturas
    - Garantiza inicio sincronizado de movimiento
 
-5. **end_now** (Generation → Creature)
-   - Señal de terminación forzada (sin comida, timeout)
-   - Fuerza envío de mensaje `finished`
+8. **generation_end** (Generation → Creature)
+   - Señal de terminación forzada (timeout de 15 segundos sin comida)
+   - Fuerza envío de `creature_removed` con `reason=finished`
+   - Criatura envía estado final y detiene agente
 
 **Patrón de comunicación:**
 - **Asincrónico**: No hay espera activa de respuestas
@@ -283,8 +477,17 @@ Características avanzadas implementadas
 - Modificación en tiempo real sin reiniciar simulación
 - Endpoint `/set_speed` actualiza periodo de `ReportBehav` de todas las criaturas
 - Útil para observación detallada (slow motion) o pruebas rápidas (fast forward)
+- Polling dinámico frontend: intervalo de actualización se adapta a timeScale (250ms/timeScale, mínimo 100ms)
 
-### 5. **Limpieza Automática de Reportes**
+### 5. **Timeout de Generación Inteligente**
+- Condición principal de fin: `active_creature_jids == 0` (todas las criaturas terminaron naturalmente)
+- Timeout de seguridad: Si no hay comida y han pasado **15 segundos** sin que nadie coma
+- Evita generaciones colgadas por bugs de comportamiento (criaturas que nunca regresan)
+- Permite observar animaciones de muerte por hambre antes de forzar cierre
+- Criaturas restantes reciben `generation_end` → desvanecimiento limpio sin sangre
+- Configurable mediante `WorldConfig.last_eat_grace` (default: 15.0 segundos)
+
+### 6. **Limpieza Automática de Reportes**
 - CSV limpiados al inicio de cada ejecución (`hostAgent.py`)
 - Previene acumulación de datos entre simulaciones
 - Archivos afectados:

@@ -313,6 +313,12 @@ class GenerationAgent(Agent):
                             pred_ack.set_metadata("performative", "inform")
                             pred_ack.body = json.dumps({"type": "eat_confirm", "jid": sender, "energy_gain": gained, "prey": other_base})
                             await self.send(pred_ack)
+                            
+                            # Enviar kill_confirmed para que el depredador actualice su contador
+                            kill_msg = Message(to=predator_jid_full)
+                            kill_msg.set_metadata("performative", "inform")
+                            kill_msg.body = json.dumps({"type": "kill_confirmed", "kills": info["kills"]})
+                            await self.send(kill_msg)
                             # registrar evento de depredación en CSV
                             try:
                                 write_header = not os.path.exists(self.agent.predation_file)
@@ -438,13 +444,15 @@ class GenerationAgent(Agent):
 
     class MonitorBehav(PeriodicBehaviour):
         async def run(self):
-            # Si no quedan creatures activos -> finalizar generación
+            # Finalizar generación cuando no queden criaturas activas
             if len(self.agent.active_creature_jids) == 0:
                 await self.agent._end_generation(self)
                 return
 
-            # Si no queda comida y no se ha comido nada en los últimos `last_eat_grace` -> terminar generación
-            if len(self.agent.foods) == 0 and (time.time() - self.agent.last_eat_time) > getattr(self.agent.config, "last_eat_grace", 3.0):
+            # Timeout de seguridad: si no queda comida y han pasado 15 segundos sin comer,
+            # forzar fin de generación (evita criaturas que nunca vuelven a casa)
+            if len(self.agent.foods) == 0 and (time.time() - self.agent.last_eat_time) > getattr(self.agent.config, "last_eat_grace", 15.0):
+                print(f"Generation {self.agent.generation}: timeout reached (no food for 15s), forcing end...")
                 # instruir a las criaturas activas a terminar
                 for jid in list(self.agent.active_creature_jids):
                     msg = Message(to=jid)
@@ -454,6 +462,7 @@ class GenerationAgent(Agent):
                 # esperar un momento y luego forzar el end
                 await asyncio.sleep(1)
                 await self.agent._end_generation(self)
+                return
 
     async def _end_generation(self, behaviour):
         if self._ending:

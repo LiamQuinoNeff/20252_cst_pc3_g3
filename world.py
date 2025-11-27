@@ -13,8 +13,8 @@ class WorldConfig:
     detection_radius: float = 1.5
     # coste de energía mayor para forzar compensaciones (agotamiento más rápido)
     energy_cost_factor: float = 0.06
-    # ventana de gracia para el fin de generación (segundos)
-    last_eat_grace: float = 2.5
+    # ventana de gracia para el fin de generación (segundos) - timeout de seguridad
+    last_eat_grace: float = 15.0
     # periodo de reporte (segundos) para las criaturas con jitter
     creature_period: float = 0.7
     # multiplicador de energía mientras se busca activamente un objetivo
