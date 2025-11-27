@@ -200,7 +200,7 @@ La interfaz funciona mediante polling al endpoint `/fishes` cada 250ms.
 
 3. **Renderizado 3D con Three.js:**
    - **Criaturas**: Geometría orgánica tipo blob con:
-     - Colores dinámicos basados en velocidad (verde = lento → rojo = rápido)
+     - Colores dinámicos basados en velocidad (marrón = lento → blanco = rápido)
      - Animaciones de respiración y flotación natural
      - Escala proporcional al tamaño (`size`)
      - Intensidad emisiva según nivel de energía
@@ -220,12 +220,12 @@ La interfaz funciona mediante polling al endpoint `/fishes` cada 250ms.
      - Comida comida (contador)
      - Asesinatos (contador de depredaciones)
    - Contorno visual destacado alrededor del blob seleccionado
-   - Stats se actualizan inmediatamente al depredar o consumir comida
+   - Stats se actualizan inmediatamente al depredar, consumir comida y gastar energía
 
 5. **Gráfico de distribución de velocidad:**
    - Histograma en tiempo real mostrando distribución de velocidades
    - 10 bins desde velocidad mínima a máxima
-   - Color degradado verde→amarillo→rojo según velocidad
+   - Color degradado marrón→crema→blanco según velocidad
    - Actualización dinámica cada 500ms
    - Permite observar presión selectiva y evolución de la población
 
@@ -238,7 +238,7 @@ La interfaz funciona mediante polling al endpoint `/fishes` cada 250ms.
    - Limpieza automática de sangre al cambiar de generación
 
 7. **Herramienta de maldición (Curse Tool):**
-   - Icono de calavera draggable en la esquina
+   - Icono draggable en la esquina
    - Arrastrar y soltar sobre un blob para eliminarlo instantáneamente
    - Envía solicitud POST a `/kill` con el JID de la criatura
    - Permite observar efectos de eliminación selectiva
@@ -256,139 +256,6 @@ La interfaz funciona mediante polling al endpoint `/fishes` cada 250ms.
 9. **OrbitControls:** Permite rotación, zoom y paneo de la cámara 3D
 
 El canvas se redibuja completamente en cada ciclo para reflejar cambios en tiempo real. El sistema de colores dinámico permite identificar visualmente criaturas rápidas (rojizas) vs lentas (verdosas), facilitando observación de patrones evolutivos.
-
-------------------------------------------------------------------------------------------------------------------------------------------------
-Mejoras visuales y sistema de feedback en tiempo real
-------------------------------------------------------------------------------------------------------------------------------------------------
-
-### **1. Colores dinámicos basados en velocidad**
-Cada blob tiene un color que representa su atributo de velocidad:
-- **Verde (HSL 120°)**: Criaturas lentas (velocidad mínima)
-- **Amarillo (HSL 60°)**: Criaturas de velocidad media
-- **Rojo (HSL 0°)**: Criaturas rápidas (velocidad máxima)
-
-**Implementación:**
-```javascript
-const minSpeed = 0.5, maxSpeed = 2.0;
-const speedNorm = (speed - minSpeed) / (maxSpeed - minSpeed);
-const hue = (1 - speedNorm) * 120; // Verde a Rojo
-```
-
-Esto permite identificar a simple vista la distribución de velocidades en la población y observar cómo la presión selectiva favorece ciertos rangos.
-
-### **2. Panel de estadísticas por criatura**
-Al hacer click en cualquier blob, se despliega un panel lateral con 8 métricas en tiempo real:
-
-| Campo | Descripción | Formato |
-|-------|-------------|---------|
-| **ID Criatura** | JID único del agente | `creature0_3` |
-| **Generación** | Número de generación actual | `Gen 2` |
-| **Velocidad** | Atributo heredable de velocidad | `1.23` |
-| **Energía** | Nivel actual de energía | `5.67` |
-| **Tamaño** | Factor de tamaño (afecta depredación) | `1.45` |
-| **Sentido** | Radio de percepción | `0.85` |
-| **Comida comida** | Contador de alimentos consumidos | `2` |
-| **Asesinatos** | Contador de depredaciones exitosas | `1` |
-
-**Actualización en tiempo real:**
-- Cada mensaje `status` del backend actualiza el panel si el blob está seleccionado
-- Actualización inmediata al depredar (contador de kills sube instantáneamente)
-- Sincronización perfecta: backend → `kill_confirmed` message → `creatureAgent.state.kills` → status report → frontend display
-
-### **3. Gráfico de distribución de velocidad**
-Histograma dinámico tipo bar chart que muestra la distribución poblacional:
-
-**Características:**
-- **10 bins** desde velocidad mínima (0.5) a máxima (2.0)
-- Colores de barras siguen mismo esquema verde→amarillo→rojo
-- Altura de barra = cantidad de criaturas en ese rango
-- Actualización cada 500ms
-- Eje Y adaptativo (escala automática según población máxima)
-
-**Utilidad científica:**
-- Observar deriva genética: distribución inicial uniforme → distribución sesgada por selección
-- Identificar presión selectiva: si recursos escasos, criaturas rápidas dominan (barras rojas más altas)
-- Detectar cuellos de botella: súbita reducción de diversidad genética
-- Validar herencia: distribución de siguiente generación refleja padres supervivientes
-
-### **4. Sistema de animaciones de muerte**
-Tres tipos de animación según causa de muerte:
-
-#### **Depredación** (`reason=killed`, `killed_by` presente)
-```javascript
-playBloodDeath(mesh, jid, isPredation=true)
-```
-- Explosión de **20 partículas de sangre** rojas (#ff0000)
-- Dispersión radial con velocidades aleatorias (0.05-0.15 unidades/frame)
-- Partículas descienden (gravedad simulada)
-- Manchas de sangre persistentes en el suelo (decals rojos)
-- Duración: 1.2 segundos
-- Efecto visual dramático para destacar evento de depredación
-
-#### **Muerte por hambre** (`reason=exhausted`)
-```javascript
-playBloodDeath(mesh, jid, isPredation=false)
-```
-- Misma animación de sangre que depredación
-- Indica muerte violenta por agotamiento extremo
-- Permite distinguir visualmente criaturas que murieron sin ser atacadas
-
-#### **Satisfacción/Timeout** (`reason=finished`)
-```javascript
-playFadeOut(mesh, jid)
-```
-- Desvanecimiento suave y limpio (fade opacity 1.0 → 0.0)
-- Reducción de tamaño al 50%
-- Sin partículas de sangre
-- Duración: 400ms
-- Representa terminación pacífica (objetivo cumplido o timeout)
-
-**Gestión de manchas de sangre:**
-- Array `bloodStains` almacena todas las manchas generadas en la generación
-- Función `cleanupBloodStains()` se ejecuta al cambiar de generación
-- Limpieza completa: remove from scene + dispose geometry/material
-- Previene acumulación de objetos 3D y memory leaks
-
-### **5. Herramienta de eliminación manual (Curse Tool)**
-Icono de calavera draggable que permite intervención manual:
-
-**Funcionamiento:**
-1. Usuario arrastra calavera desde esquina superior derecha
-2. Suelta sobre un blob en el canvas
-3. Raycasting de Three.js detecta criatura bajo cursor
-4. POST request a `/kill` endpoint: `{jid: "creature1_5"}`
-5. Backend elimina agente y notifica como `creature_removed`
-6. Frontend reproduce animación de sangre
-
-**Utilidad:**
-- Experimentos controlados: eliminar selectivamente criaturas lentas/rápidas
-- Observar impacto de eliminación artificial en distribución
-- Debugging: forzar eventos de muerte para probar animaciones
-
-### **6. Sincronización de movimiento mejorada**
-Para evitar desincronización entre backend y frontend:
-
-**Antes (problema):**
-- `movementScale = Math.pow(timeScale, 0.5)` suavizaba excesivamente
-- `baseMoveSpeed = 2.6` demasiado lento
-- Polling fijo 250ms no se adaptaba a timeScale
-- Resultado: criaturas lentas, comida desaparecía sin contacto visible
-
-**Después (solución):**
-- `movementScale = timeScale` (lineal, sin suavizado)
-- `baseMoveSpeed = 8.0` (movimiento más fluido)
-- `visualFactor = speed` (directo, sin exponencial)
-- Polling dinámico: `interval = 250ms / timeScale` (min 100ms)
-- Resultado: sincronización perfecta, movimientos fluidos
-
-**Fórmula de polling adaptativo:**
-```javascript
-const baseInterval = 250;
-const dynamicInterval = Math.max(100, baseInterval / timeScale);
-```
-
-A 2x velocidad → 125ms polling (más actualizaciones)
-A 0.25x velocidad → 250ms polling (menos frecuencia necesaria)
 
 ------------------------------------------------------------------------------------------------------------------------------------------------
 Modelo de comunicación
@@ -560,22 +427,6 @@ Registro cronológico de eventos de depredación y consumo:
 - `x`, `y`: Coordenadas del evento
 
 ------------------------------------------------------------------------------------------------------------------------------------------------
-Diagnóstico y depuración
-------------------------------------------------------------------------------------------------------------------------------------------------
-
-`Para buscar información específica en los logs:`
-powershell
-Select-String -Path .\report\run.log* -Pattern "creature9_7"
-
-`Para ver las últimas líneas del archivo (archivo activo):`
-powershell
-Get-Content .\report\run.log -Tail 200
-
-`Para revisar también los archivos rotados:`
-powershell
-Get-ChildItem .\report\run.log* | Get-Content -Tail 200
-
-------------------------------------------------------------------------------------------------------------------------------------------------
 Parámetros configurables
 ------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -622,28 +473,28 @@ Este proyecto se basa en conceptos y estructuras presentadas en los ejercicios d
 
 Inspiración del ejercicio “fish.py” (pecesito):
 El comportamiento de movimiento y atributos básicos de las criaturas deriva del modelo visto en clase: un agente con posición, tamaño y velocidad que se actualiza cada ciclo. En el proyecto, esto se refleja en:
-	•	CreatureState (creatureAgent.py): definición de size, speed, x, y, sense, foods_eaten, energy.
-	•	ReportBehav.run() (creatureAgent.py): lógica de desplazamiento por tick, cálculos de cambio de posición, consumo energético y envío de estado.
-	•	utils.random_size(), utils.random_speed(), utils.default_energy_for_speed(): funciones basadas en la relación tamaño–velocidad presentada en el ejercicio del pez.
+- CreatureState (creatureAgent.py): definición de size, speed, x, y, sense, foods_eaten, energy.
+- ReportBehav.run() (creatureAgent.py): lógica de desplazamiento por tick, cálculos de cambio de posición, consumo energético y envío de estado.
+- utils.random_size(), utils.random_speed(), utils.default_energy_for_speed(): funciones basadas en la relación tamaño–velocidad presentada en el ejercicio del pez.
 
 Inspiración del ejercicio “dummy.py”:
 El patrón básico de un agente SPADE con async def setup() proviene del ejemplo DummyAgent. Se reutiliza en:
-	•	GenerationAgent.setup() (generationAgent.py): inicialización del supervisor y registro de behaviours.
-	•	CreatureAgent.setup() (creatureAgent.py): configuración inicial de estado y behaviours del agente criatura.
-	•	Estructura de arranque con spade.run(main()) en hostAgent.py.
+- GenerationAgent.setup() (generationAgent.py): inicialización del supervisor y registro de behaviours.
+- CreatureAgent.setup() (creatureAgent.py): configuración inicial de estado y behaviours del agente criatura.
+- Estructura de arranque con spade.run(main()) en hostAgent.py.
 
 Inspiración del ejercicio “cyclic.py” (CyclicBehaviour y PeriodicBehaviour):
 El uso de behaviours internos y ciclos de ejecución periódicos proviene del ejemplo del contador. Se adapta de forma más compleja en:
-	•	GenerationAgent.RecvBehav(CyclicBehaviour): recepción continua de mensajes de criaturas para coordinar eventos y depredación.
-	•	GenerationAgent.MonitorBehav(PeriodicBehaviour): verificación periódica del tiempo de generación.
-	•	CreatureAgent.ReportBehav(PeriodicBehaviour): envío periódico del estado y actualización energética.
-	•	CreatureAgent.RecvBehav(CyclicBehaviour): manejo de mensajes entrantes (comida, finalización, etc.).
+- GenerationAgent.RecvBehav(CyclicBehaviour): recepción continua de mensajes de criaturas para coordinar eventos y depredación.
+- GenerationAgent.MonitorBehav(PeriodicBehaviour): verificación periódica del tiempo de generación.
+- CreatureAgent.ReportBehav(PeriodicBehaviour): envío periódico del estado y actualización energética.
+- CreatureAgent.RecvBehav(CyclicBehaviour): manejo de mensajes entrantes (comida, finalización, etc.).
 
 Inspiración del Host de la Semana 10 (visualización de peces):
 El diseño del Host que recibe estados y expone /fishes como endpoint JSON se basa directamente en dicho ejercicio. En el proyecto toma forma en:
-	•	HostAgent.RecvBehav: almacenamiento de estados, administración de criaturas activas y registro de eliminaciones.
-	•	HostAgent._start_web(): servidor aiohttp que expone /fishes, limpiando criaturas eliminadas y sincronizando con la UI.
-	•	Mecanismo de limpieza temporal (removals) inspirado en la necesidad abordada en los ejemplos: evitar que mensajes tardíos reintroduzcan agentes eliminados.
+- HostAgent.RecvBehav: almacenamiento de estados, administración de criaturas activas y registro de eliminaciones.
+- HostAgent._start_web(): servidor aiohttp que expone /fishes, limpiando criaturas eliminadas y sincronizando con la UI.
+- Mecanismo de limpieza temporal (removals) inspirado en la necesidad abordada en los ejemplos: evitar que mensajes tardíos reintroduzcan agentes eliminados.
 
 **EJERCICIO SEMANA 11 - Aviones y Torre de Control**
 
@@ -651,30 +502,30 @@ El proyecto también toma conceptos fundamentales del ejercicio de clase basado 
 
 Patrón Torre–Entidad (inspirado en torreAgent.py):
 En el ejercicio, la Torre recibía mensajes de los aviones, mantenía su estado y enviaba respuestas. En el proyecto, este patrón se refleja directamente en:
-	•	GenerationAgent.RecvBehav (generationAgent.py): recepción continua de mensajes de criaturas, actualización de registros y validación de eventos.
-	•	HostAgent.RecvBehav (hostAgent.py): comportamiento análogo a la Torre; mantiene un mapa actualizado de criaturas y notifica eliminaciones.
-	•	HostAgent._start_web(): equivalente a la Torre como punto central que expone el estado global.
+- GenerationAgent.RecvBehav (generationAgent.py): recepción continua de mensajes de criaturas, actualización de registros y validación de eventos.
+- HostAgent.RecvBehav (hostAgent.py): comportamiento análogo a la Torre; mantiene un mapa actualizado de criaturas y notifica eliminaciones.
+- HostAgent._start_web(): equivalente a la Torre como punto central que expone el estado global.
 
 Patrón Entidad que reporta su estado (inspirado en avionAgent.py):
 Los aviones enviaban periódicamente mensajes con posición y estado. Este patrón fue adoptado en:
-	•	CreatureAgent.ReportBehav.run() (creatureAgent.py): envío periódico del estado completo de la criatura (x, y, size, speed, energy, foods_eaten).
-	•	CreatureAgent.RecvBehav: recepción de instrucciones externas (finalización, confirmación de comida, remoción).
+- CreatureAgent.ReportBehav.run() (creatureAgent.py): envío periódico del estado completo de la criatura (x, y, size, speed, energy, foods_eaten).
+- CreatureAgent.RecvBehav: recepción de instrucciones externas (finalización, confirmación de comida, remoción).
 Tal como el avión informaba su ubicación y condición, las criaturas reportan su estado al supervisor.
 
 Patrón request–response (inspirado en senderAgent.py y receiverAgent.py):
 El ejercicio mostraba cómo un agente envía un mensaje y espera una respuesta coherente del receptor. En el proyecto, este patrón se mantiene en:
-	•	GenerationAgent.handle_food_request() implícito dentro de RecvBehav: cuando una criatura informa que llegó a una comida, el GenerationAgent responde confirmando o rechazando la adquisición.
-	•	CreatureAgent.RecvBehav: espera respuestas del GenerationAgent que modifican la energía o informan eventos.
+- GenerationAgent.handle_food_request() implícito dentro de RecvBehav: cuando una criatura informa que llegó a una comida, el GenerationAgent responde confirmando o rechazando la adquisición.
+- CreatureAgent.RecvBehav: espera respuestas del GenerationAgent que modifican la energía o informan eventos.
 
 Estructura de arranque centralizada (inspirado en all.py):
 El ejercicio mostraba cómo iniciar múltiples agentes y un host coordinador desde un único archivo. Esto se refleja en:
-	•	hostAgent.main(): arranca HostAgent, inicia GenerationAgent y prepara el entorno web.
-	•	Uso del patrón spade.run(main()), heredado directamente del ejemplo de aviones.
+- hostAgent.main(): arranca HostAgent, inicia GenerationAgent y prepara el entorno web.
+- Uso del patrón spade.run(main()), heredado directamente del ejemplo de aviones.
 
 Mensajes estructurados con contenido JSON (inspirado en el intercambio Torre–Avión):
 En el ejercicio, los aviones enviaban diccionarios con atributos tales como altitud, posición y estado. En el proyecto, esto se replica mediante:
-	•	Mensajes JSON enviados desde CreatureAgent.ReportBehav al GenerationAgent.
-	•	Mensajes JSON procesados en GenerationAgent.RecvBehav y en HostAgent.RecvBehav.
+- Mensajes JSON enviados desde CreatureAgent.ReportBehav al GenerationAgent.
+- Mensajes JSON procesados en GenerationAgent.RecvBehav y en HostAgent.RecvBehav.
 
 
 **DECLARACION DE USO DE IA (INTELIGENCIA ARTIFICIAL)**
@@ -682,11 +533,11 @@ En el ejercicio, los aviones enviaban diccionarios con atributos tales como alti
 Durante la implementación del sistema se emplearon herramientas de asistencia basadas en IA como apoyo complementario al proceso de desarrollo. Estas herramientas se usaron principalmente para dinamizar el “flow” de trabajo y facilitar decisiones de diseño mientras se construía la simulación.
 
 Principales usos de la IA en el proyecto:
-	•	Idear y refinar estructuras iniciales de módulos y behaviours, manteniendo un estilo homogéneo entre agentes.
-	•	Generar borradores de funciones repetitivas o plantillas base para clases (CreatureAgent, GenerationAgent, HostAgent) para acelerar el ritmo de codificación.
-	•	Convertir ideas sueltas en código más claro, ayudando a mantener coherencia entre movimiento, reporte de estado y sincronización.
-	•	Asistir en la documentación técnica y organización del README, permitiendo explicar mejor decisiones internas del proyecto.
-	•	Apoyar el estilo de desarrollo ágil, donde se alterna entre ideación rápida, prueba, ajuste y mejora continua.
+- Idear y refinar estructuras iniciales de módulos y behaviours, manteniendo un estilo homogéneo entre agentes.
+- Generar borradores de funciones repetitivas o plantillas base para clases (CreatureAgent, GenerationAgent, HostAgent) para acelerar el ritmo de codificación.
+- Convertir ideas sueltas en código más claro, ayudando a mantener coherencia entre movimiento, reporte de estado y sincronización.
+- Asistir en la documentación técnica y organización del README, permitiendo explicar mejor decisiones internas del proyecto.
+- Apoyar el estilo de desarrollo ágil, donde se alterna entre ideación rápida, prueba, ajuste y mejora continua.
 
 El uso de IA permitió mantener un ritmo de desarrollo fluido, estructurado y más consistente, especialmente al trabajar con múltiples agentes y comportamientos concurrentes.
 
@@ -707,3 +558,4 @@ El uso de IA permitió mantener un ritmo de desarrollo fluido, estructurado y m�
 ------------------------------------------------------------------------------------------------------------------------------------------------
 
 Este proyecto se publica bajo la licencia MIT. Consulta el archivo `LICENSE` para el texto completo.
+
